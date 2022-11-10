@@ -1,0 +1,41 @@
+version: "3.9"
+services:
+  postgres:
+    container_name: postgres_container_v1
+    image: postgres:13.3
+    environment:
+      POSTGRES_DB:  "news_db"
+      POSTGRES_USER: "asdf"
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    ports:
+      - "5432:5432"
+    networks:
+      - pg_network
+    secrets:
+      - pg_password
+
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 3G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+secrets:
+  pg_password:
+    file: pg_password.txt
+
+
+volumes:
+  db_data:
+
+networks:
+  pg_network:
+    driver: bridge
