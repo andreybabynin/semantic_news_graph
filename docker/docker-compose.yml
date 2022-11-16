@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   postgres:
-    container_name: postgres_container_v1
+    container_name: postgres_container_v2
     image: postgres:13.3
     environment:
       POSTGRES_DB:  "news_db"
@@ -13,7 +13,6 @@ services:
       - pg_network
     secrets:
       - pg_password
-
     volumes:
       - db_data:/var/lib/postgresql/data
     deploy:
@@ -28,13 +27,38 @@ services:
       timeout: 5s
       retries: 5
 
+  telegram_grabber:
+    container_name: telegram_grabber_v1
+    image: python:3.10-slim
+    command: sh -c "python -m pip install -r ./app/requirements.txt && python ./app/parser/parser.py"
+    environment:
+      POSTGRES_DB:  "news_db"
+      POSTGRES_USER: "asdf"
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      TELEGRAM_SECRETS_FILE:  /run/secrets/telegram_secrets
+    networks:
+      - pg_network
+    secrets:
+      - telegram_secrets
+      - pg_password
+    volumes:
+      - ./:/app
+    expose:
+      - 8080
+    # restart: unless-stopped
+
+
 secrets:
   pg_password:
     file: pg_password.txt
-
+  telegram_secrets:
+    file: telegram_secrets.json
 
 volumes:
   db_data:
+    external: true
+    name: d_test_db_data
+
 
 networks:
   pg_network:
