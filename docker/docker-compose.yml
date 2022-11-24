@@ -4,7 +4,7 @@ services:
     container_name: postgres_container_v2
     image: postgres:13.3
     environment:
-      POSTGRES_DB:  "news_db"
+      POSTGRES_DB: "news_db"
       POSTGRES_USER: "asdf"
       POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
     ports:
@@ -22,7 +22,11 @@ services:
           memory: 3G
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,10 +36,10 @@ services:
     image: python:3.10-slim
     command: sh -c "python -m pip install -r ./app/requirements.txt && python ./app/parser/parser.py"
     environment:
-      POSTGRES_DB:  "news_db"
+      POSTGRES_DB: "news_db"
       POSTGRES_USER: "asdf"
       POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
-      TELEGRAM_SECRETS_FILE:  /run/secrets/telegram_secrets
+      TELEGRAM_SECRETS_FILE: /run/secrets/telegram_secrets
     networks:
       - pg_network
     secrets:
@@ -47,10 +51,31 @@ services:
       - 8080
     # restart: unless-stopped
 
+  ml_pipelines:
+    restart: unless-stopped
+    build:
+      context: ..
+      dockerfile: docker/ml_pipelines/Dockerfile
+    container_name: ml_pipelines_v1
+    networks:
+      - pg_network
+    environment:
+      POSTGRES_DB: "news_db"
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "user2"
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password_ml
+    secrets:
+      - pg_password_ml
+    command: sh -c "python /code/src/models/summarization_pipeline.py && sleep 1h"
+    depends_on:
+      - postgres
 
 secrets:
   pg_password:
     file: pg_password.txt
+  pg_password_ml:
+    file: pg_password_ml.txt
   telegram_secrets:
     file: telegram_secrets.json
 
@@ -58,7 +83,6 @@ volumes:
   db_data:
     external: true
     name: d_test_db_data
-
 
 networks:
   pg_network:
