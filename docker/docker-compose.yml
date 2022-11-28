@@ -67,7 +67,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/pg_password_ml
     secrets:
       - pg_password_ml
-    command: sh -c "python /code/src/models/summarization_pipeline.py && sleep 1h"
+    command: sh -c "python /code/src/models/summarization_pipeline.py && python /code/src/models/ner_pipeline.py && sleep 1h"
     depends_on:
       - postgres
 

@@ -4,7 +4,6 @@ import os
 import re
 import datetime
 from src.common_funcs import safe_pg_read_query, safe_pg_execute_values
-
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 
@@ -57,6 +56,9 @@ def summarization_pipeline():
     """
     # list of tuples(id_news, news_text, summary_text)
     news_to_summary = safe_pg_read_query(PG_CONN_CFG, query)
+
+    # # Unit-test
+    # news_to_summary = news_to_summary[:10]
 
     current_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     result = []
