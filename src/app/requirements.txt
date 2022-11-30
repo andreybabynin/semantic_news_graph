@@ -1,4 +1,10 @@
-requests
-pandas
-networkx
+# local package
+-e .
+
+# external packages
+requests==2.28.1
+numpy==1.23.4
+pandas==1.5.1
+networkx==2.8.8
 flask
+psycopg2-binary==2.9.5
