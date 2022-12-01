@@ -21,6 +21,7 @@ import os
 import sys
 import requests
 import datetime
+import warnings
 from collections import defaultdict
 from src.common_funcs import safe_pg_read_query, safe_pg_write_query, get_wikidata_qid
 import psycopg2
@@ -28,6 +29,8 @@ from psycopg2 import Error
 from psycopg2.extras import execute_values
 import stanza
 import natasha
+
+warnings.filterwarnings("ignore")
 
 
 # Hyperparameters

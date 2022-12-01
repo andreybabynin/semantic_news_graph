@@ -1,4 +1,4 @@
-FROM python:3.9
+FROM pytorch/pytorch:1.13.0-cuda11.6-cudnn8-runtime
 
 WORKDIR /code
 
@@ -9,6 +9,3 @@ COPY src /code/src
 RUN pip install --upgrade pip
 
 RUN pip install -r requirements_ml.txt
-
-
-
