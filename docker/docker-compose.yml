@@ -93,28 +93,6 @@ services:
     depends_on:
       - postgres
 
-  app_front:
-    restart: unless-stopped
-    build:
-      context: ..
-      dockerfile: docker/app/Dockerfile
-    container_name: app_front_v1
-    networks:
-      - pg_network
-    environment:
-      POSTGRES_DB: "news_db"
-      POSTGRES_HOST: "postgres"
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: "asdf"
-      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
-    ports:
-      - "5000:5000"
-    secrets:
-      - pg_password
-    command: sh -c "python /code/src/app/app.py"
-    depends_on:
-      - postgres
-
 secrets:
   pg_password:
     file: pg_password.txt
