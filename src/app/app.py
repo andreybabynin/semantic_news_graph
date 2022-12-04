@@ -198,7 +198,7 @@ def build_network(graph_query):
         df_triples,
         source="source",
         target="target",
-        edge_attr="name",
+        edge_attr=['name','sentences'],
         create_using=nx.Graph(),
     )
     data = nx.node_link_data(G)
