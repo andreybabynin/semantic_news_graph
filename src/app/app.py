@@ -98,7 +98,6 @@ def compute_triplets(
             {
                 "source": ["no_node1"],
                 "target": ["no_node2"],
-                "edge": ["0 news"],
                 "amount": [0],
                 "news": [["no news"]],
             }
@@ -106,7 +105,7 @@ def compute_triplets(
 
     df_nlinks_counts = df_nlinks.groupby(by="id_news").ner_name.count()
 
-    # удаляем новости с >= 10 нер, пока не решится вопрос с комплексными
+    # удаляем новости с > 5 нер, пока не решится вопрос с комплексными
     # сводками новостей (часто с ключевым словом "главное:"), где могут
     # в виде списка приводится не связанные между собой новости,
     # в настоящий момент все ner, упоминаемые в любой части тако сводки,
@@ -114,7 +113,7 @@ def compute_triplets(
     # дробить такие новости на несколько, либо использовать схожий подход,
     # когда ner будут связаны между обой только в пределах перечислений
     id_news_to_drop = df_nlinks_counts[
-        ((df_nlinks_counts < 2) | (df_nlinks_counts > 10))
+        ((df_nlinks_counts < 2) | (df_nlinks_counts > 5))
     ].index
     df_nlinks = df_nlinks[~df_nlinks.id_news.isin(id_news_to_drop)]
 
@@ -176,13 +175,11 @@ def compute_triplets(
     if min_news_count > 1:
         df_triples = df_triples[df_triples.amount >= min_news_count]
 
-    df_triples["edge"] = df_triples.amount.map(lambda x: f"{x} news")
-
     df_triples[["source", "target"]] = pd.DataFrame(
         df_triples["ner_name"].tolist(), index=df_triples.index
     )
 
-    df_triples = df_triples[["source", "target", "edge", "amount", "news"]]
+    df_triples = df_triples[["source", "target", "amount", "news"]]
 
     return df_triples
 
@@ -190,26 +187,17 @@ def compute_triplets(
 def build_network(graph_query):
 
     df_triples = compute_triplets(PG_CONN_CFG, **graph_query)
-    df_triples = df_triples.rename(columns={"edge": "name"})[
-        ["source", "target", "name"]
-    ]
 
     G = nx.from_pandas_edgelist(
         df_triples,
         source="source",
         target="target",
-        edge_attr=['name','sentences'],
+        edge_attr=["amount", "news"],
         create_using=nx.Graph(),
     )
     data = nx.node_link_data(G)
 
     return data
-
-
-# DELETE BEFORE PROD!!!
-@app.route("/temp", methods=["GET", "POST"])
-def chrt():
-    return render_template("temp2.html")
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -227,7 +215,7 @@ def index_func():
             "input_ner": "",
             "date_min": "2022-08-01",
             "date_max": "2022-08-31",
-            "min_news_count": 10,
+            "min_news_count": 5,
         }
 
     session["graph_query"] = graph_query
@@ -242,6 +230,12 @@ def static_proxy():
     network = build_network(session.get("graph_query"))
 
     return jsonify(network)
+
+
+@app.route("/about", methods=["GET", "POST"])
+def about_func():
+
+    return render_template("about.html")
 
 
 def main():
