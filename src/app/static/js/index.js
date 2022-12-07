@@ -30,7 +30,7 @@ var color = d3.scaleOrdinal(d3.schemeCategory20);
 var simulation = d3.forceSimulation()
   .force("link", d3.forceLink().id(function (d) { return d.id; }))
   .force("charge", d3.forceManyBody().strength(-800)) // мера зазреженности графа (-100 очень ужат, -2000 разрежен)
-  //.force("center", d3.forceCenter(width / 2, height / 2))
+  .force("center", d3.forceCenter(1400 / 2, 800 / 2))
   ;
 
 
