@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title%}
+Network graph
+{% endblock %}
+
+#"
+{% block body %}
+<div align='center' id="my_dataviz">
+    <form action="" method='POST'>
+        <div>
+            <label for="input_ner">NER</label>
+            <input type="text" name="input_ner">
+            <input type="submit" class="w-10 btn btn-sm btn-outline-primary" style="vertical-align: top>
+        </div>
+
+        <label for="date_min">Date start</label>
+        <input type="date" value="2022-08-01" name="date_min">
+        <label for="date_max">Date end</label>
+        <input type="date" value="2022-08-31" name="date_max">
+        <label for="graph_depth">Graph depth</label>
+        <input type="number" value="1" name="graph_depth">
+        <label for="min_news_count">Min news count (on edge)</label>
+        <input type="number" value="2" name="min_news_count">
+
+    </form>
+
+
+    <svg width="1400" height="800" >
+        <path stroke="black" fill="none"
+              d="M 0 0 L 1400 0 L 1400 800 L 0 800 Z">
+        </path>
+    </svg>
+    <script type="text/javascript" src="static/js/index.js"></script>
+</div>
+
+{% endblock %}>
