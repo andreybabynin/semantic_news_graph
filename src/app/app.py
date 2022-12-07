@@ -25,7 +25,10 @@ with open(os.environ.get("POSTGRES_PASSWORD_FILE"), "r") as f:
     PG_CONN_CFG["password"] = f.readlines()[0].rstrip("\n")
 
 
-def get_db_data_for_triplets(pg_conn_cfg, date_min: str, date_max: str):
+def get_db_data_for_triplets(pg_conn_cfg, input_ner: str, date_min: str, date_max: str):
+
+    # clean input ner (prevent from sql injection)
+    input_ner = re.sub(r"[^a-zA-Zа-яА-ЯёЁ№0-9 ]+", "", input_ner)
 
     # check query dates to sql injection
     date_pattern = r"\d\d\d\d-\d\d-\d\d"
@@ -38,29 +41,76 @@ def get_db_data_for_triplets(pg_conn_cfg, date_min: str, date_max: str):
                 host=pg_conn_cfg["host"],
                 port=pg_conn_cfg["port"],
             )
-            query = f"""
-                SELECT id_news, summary_text, news_date
-                FROM (SELECT * FROM news
-                    WHERE news_date
-                            BETWEEN '{date_min}' AND
-                                    '{date_max}') news
-                    INNER JOIN news_summary USING(id_news)
-            """
-            df_news = pd.read_sql(query, pg_con, index_col=["id_news"])
 
-            query = f"""
-                SELECT id_news, ner_name
-                FROM (SELECT * FROM news_links
-                    WHERE id_news IN (SELECT id_news FROM news
-                                        WHERE news_date
-                                        BETWEEN '{date_min}' AND
-                                        '{date_max}')) news_links
-                    INNER JOIN ner USING(id_ner)
-            """
-            df_nlinks = pd.read_sql(query, pg_con)
+            # fuzzy search by input ner
+            if len(input_ner) > 0:
+                query = """
+                SELECT CASE WHEN %(input_ner)s IN (SELECT ner_synonym
+                                                   FROM ner_synonyms)
+                    THEN
+                    (SELECT ner_name
+                        FROM ner
+                        WHERE id_ner = (SELECT id_ner
+                                        FROM ner_synonyms
+                                        WHERE %(input_ner)s = ner_synonym
+                                        LIMIT 1))
+                        ELSE
+                        (SELECT ner_name
+                        FROM ner
+                        WHERE id_ner =
+                            (SELECT id_ner
+                             FROM ner_synonyms
+                             ORDER BY SIMILARITY(ner_synonym, %(input_ner)s) DESC,
+                                   ABS(LENGTH(ner_synonym) - LENGTH(%(input_ner)s)) ASC
+                             LIMIT 1))
+                        END;
+                """
+                pg_cur = pg_con.cursor()
+                pg_cur.execute(query, {"input_ner": input_ner})
+                res = pg_cur.fetchall()
+                pg_cur.close()
+                if len(res) > 0:
+                    founded_ner = res[0][0]
+                else:
+                    founded_ner = None
+            else:
+                founded_ner = ""
+
+            if founded_ner is not None:
+                # query to db for get news sample in date range
+                query = f"""
+                    SELECT id_news, summary_text, news_date
+                    FROM (SELECT * FROM news
+                        WHERE news_date
+                                BETWEEN '{date_min}' AND
+                                        '{date_max}') news
+                        INNER JOIN news_summary USING(id_news)
+                """
+                df_news = pd.read_sql(query, pg_con, index_col=["id_news"])
+
+                query = f"""
+                    SELECT id_news, ner_name
+                    FROM (SELECT * FROM news_links
+                        WHERE id_news IN (SELECT id_news FROM news
+                                            WHERE news_date
+                                            BETWEEN '{date_min}' AND
+                                            '{date_max}')) news_links
+                        INNER JOIN ner USING(id_ner)
+                """
+                df_nlinks = pd.read_sql(query, pg_con)
+
+                # check if the ner is not mentioned in the news for the given date range
+                if founded_ner != "" and founded_ner not in df_nlinks.ner_name.values:
+                    founded_ner = None
+
+            else:
+                # ner not found
+                df_news = None
+                df_nlinks = None
 
         except (Exception, Error) as error:
             print("Error connection to PostgreSQL:\n", error)
+            founded_ner = None
             df_news = None
             df_nlinks = None
 
@@ -68,11 +118,16 @@ def get_db_data_for_triplets(pg_conn_cfg, date_min: str, date_max: str):
             if "pg_con" in locals() and pg_con:
                 pg_con.close()
     else:
+        founded_ner = None
         df_news = None
         df_nlinks = None
         print(f"Dates is incorrect {date_min} - {date_max}")
 
-    return df_news, df_nlinks
+    return (
+        founded_ner,
+        df_news,
+        df_nlinks,
+    )
 
 
 def compute_triplets(
@@ -83,17 +138,12 @@ def compute_triplets(
     graph_depth=None,
     min_news_count=1,
 ):
-    # query to db
-    df_news, df_nlinks = get_db_data_for_triplets(PG_CONN_CFG, date_min, date_max)
+    # query to db and fuzzy search by synonyms table
+    founded_ner, df_news, df_nlinks = get_db_data_for_triplets(
+        PG_CONN_CFG, input_ner, date_min, date_max
+    )
 
-    # task: change to fuzzy search by synonyms table
-    founded_ner = input_ner
-
-    if (
-        df_news is None
-        or df_nlinks is None
-        or (input_ner != "" and founded_ner not in df_nlinks.ner_name.values)
-    ):
+    if founded_ner is None or df_news is None or df_nlinks is None:
         return pd.DataFrame(
             {
                 "source": ["no_node1"],
