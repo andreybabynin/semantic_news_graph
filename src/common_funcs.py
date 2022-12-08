@@ -70,7 +70,7 @@ def safe_pg_read_query(pg_conn_cfg, sql_query, placeholder=None, verbose=False):
         if placeholder is None:
             pg_cur.execute(sql_query)
 
-        elif isinstance(placeholder, tuple):
+        elif isinstance(placeholder, tuple) or isinstance(placeholder, dict):
             pg_cur.execute(sql_query, placeholder)
 
         fetchall_list = pg_cur.fetchall()

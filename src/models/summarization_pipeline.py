@@ -3,9 +3,11 @@
 import os
 import re
 import datetime
+import warnings
 from src.common_funcs import safe_pg_read_query, safe_pg_execute_values
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
+warnings.filterwarnings("ignore")
 
 # Hyperparameters
 MODEL_CFG = {

@@ -93,3 +93,6 @@ VALUES ('production'),
 INSERT INTO model_types(model_type)
 VALUES ('summarization'),
         ('ner');
+
+--for fuzzy search by SIMILARITY
+CREATE EXTENSION pg_trgm;
