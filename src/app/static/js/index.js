@@ -1,6 +1,11 @@
-var svg = d3.select("svg").style("font", "12px sans-serif"), // если убрать style  шрифт поменяется
+var svg = d3.select("svg").style("font", "12px sans-serif").call(d3.zoom().on("zoom", function () {
+       svg.attr("transform", d3.event.transform)
+    }))
+  .append("g")
+, // если убрать style  шрифт поменяется
   width = +svg.attr("width"),
-  height = +svg.attr("height");
+  height = +svg.attr("height")
+  ;
 
 /* //arrows (part 1 of 2)
 svg.append("svg:defs").selectAll("marker")
@@ -25,7 +30,8 @@ var color = d3.scaleOrdinal(d3.schemeCategory20);
 var simulation = d3.forceSimulation()
   .force("link", d3.forceLink().id(function (d) { return d.id; }))
   .force("charge", d3.forceManyBody().strength(-800)) // мера зазреженности графа (-100 очень ужат, -2000 разрежен)
-  .force("center", d3.forceCenter(width / 2, height / 2));
+  .force("center", d3.forceCenter(1400 / 2, 800 / 2))
+  ;
 
 
 d3.json("/data", function (error, graph) {
@@ -97,31 +103,26 @@ d3.json("/data", function (error, graph) {
     .on("click", clicked);
 
 
-  function clicked(d, i) {     // Передать данные линии
+  function clicked(d, i) {     // Передать данные линии и отображение текста
+    var tooltip = d3.select("#my_dataviz")
+          .append("div")
+          .attr('id', 'div_info')
+            .style("position", "absolute")
+            .style("visibility", "hidden")
+            .attr('text-anchor', 'middle')
+            .text(d.news)
+            .on("click", function(){return tooltip.style("visibility", "hidden");});
 
-    svg.append('rect')
-      .attr('id', 'rect_info')
-      .attr('x', 10)
-      .attr('y', 120)
-      .attr('width', 300)
-      .attr('height', 500)
-      .attr('stroke', 'black')
-      .attr('fill', '#F5FFFA')
-      .on("click", del_info)
-
-    svg.append('text').data(graph.links)
-      .attr('id', 'text_info')
-      .attr('x', 20)
-      .attr('y', 160)
-      .attr('stroke', 'black')
-      .style("font-size", 15)
-      .text(d.news)
+    d3.selectAll("#div_info").style("visibility", "hidden")
+    tooltip.style("visibility", "visible")
+           .style("top", (event.pageY))
+           .style("left",(event.pageX))
+           .style('width', "px")
+		   .style('height',"px")
+		;
 
   }
-  function del_info(event, d) {
-    svg.selectAll("#rect_info").remove()
-    svg.selectAll("#text_info").remove()
-  }
+
 
 
   simulation
@@ -166,3 +167,4 @@ function dragended(d) {
   d.fx = null;
   d.fy = null;
 }
+
