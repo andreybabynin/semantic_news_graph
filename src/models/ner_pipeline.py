@@ -20,7 +20,8 @@ import re
 import os
 import sys
 import warnings
-from src.common_funcs import safe_pg_read_query, safe_pg_write_query, SynNamedEntities
+from src.common_funcs import safe_pg_read_query, safe_pg_write_query
+from src.common_classes import SynNamedEntities
 import psycopg2
 from psycopg2 import Error
 from psycopg2.extras import execute_values
