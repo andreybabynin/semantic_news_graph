@@ -89,13 +89,14 @@ def get_db_data_for_triplets(pg_conn_cfg, input_ner: str, date_min: str, date_ma
                 df_news = pd.read_sql(query, pg_con, index_col=["id_news"])
 
                 query = f"""
-                    SELECT id_news, ner_name
+                    SELECT id_news, ner_name, ner_type
                     FROM (SELECT * FROM news_links
-                        WHERE id_news IN (SELECT id_news FROM news
+                          WHERE id_news IN (SELECT id_news FROM news
                                             WHERE news_date
                                             BETWEEN '{date_min}' AND
                                             '{date_max}')) news_links
-                        INNER JOIN ner USING(id_ner)
+                         INNER JOIN ner USING(id_ner)
+                         LEFT JOIN ner_types USING(id_ner_type)
                 """
                 df_nlinks = pd.read_sql(query, pg_con)
 
@@ -147,7 +148,9 @@ def compute_triplets(
         return pd.DataFrame(
             {
                 "source": ["no_node1"],
+                "s_type": ["no_type1"],
                 "target": ["no_node2"],
+                "t_type": ["no_type2"],
                 "amount": [0],
                 "news": [["no news"]],
             }
@@ -204,6 +207,12 @@ def compute_triplets(
 
         df_nlinks = df_nlinks[df_nlinks.id_news.isin(prev_lvls_idx)]
 
+    re_clean_name = re.compile(r"[^a-zA-Zа-яА-Я0-9 -+№%]+")
+    df_nlinks["ner_name"] = df_nlinks.apply(
+        lambda x: (re_clean_name.sub("", x.ner_name), x.ner_type), axis=1
+    )
+    df_nlinks.drop(columns="ner_type", inplace=True)
+
     df_nlinks = df_nlinks.groupby("id_news").agg({"ner_name": sorted})
 
     df_nlinks = df_nlinks.merge(df_news, how="left", left_index=True, right_index=True)
@@ -225,11 +234,14 @@ def compute_triplets(
     if min_news_count > 1:
         df_triples = df_triples[df_triples.amount >= min_news_count]
 
-    df_triples[["source", "target"]] = pd.DataFrame(
-        df_triples["ner_name"].tolist(), index=df_triples.index
+    df_triples[["source", "s_type", "target", "t_type"]] = pd.DataFrame(
+        df_triples["ner_name"]
+        .map(lambda x: (x[0][0], x[0][1], x[1][0], x[1][1]))
+        .to_list(),
+        index=df_triples.index,
     )
 
-    df_triples = df_triples[["source", "target", "amount", "news"]]
+    df_triples = df_triples[["source", "s_type", "target", "t_type", "amount", "news"]]
 
     return df_triples
 
@@ -240,8 +252,8 @@ def build_network(graph_query):
 
     G = nx.from_pandas_edgelist(
         df_triples,
-        source="source",
-        target="target",
+        source=["source", "s_type"],
+        target=["target", "t_type"],
         edge_attr=["amount", "news"],
         create_using=nx.Graph(),
     )
