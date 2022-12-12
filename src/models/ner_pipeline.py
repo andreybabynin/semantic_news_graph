@@ -372,7 +372,14 @@ def write_db_results_ner_pipeline(pg_conn_cfg, synonyms):
 
 
 def update_main_ner_names_and_types(pg_conn_cfg):
-    # Update main ner names
+    # Update main ner names.
+    # Description of the sql query algorithm: we get the last date of records
+    # from synonym_stats (i.e. the last change), we form a list of ners that
+    # appeared in it; for all selected ner_id (and only for them), we revise
+    # the default name, based on the statistics of the use of synonyms that
+    # refer to a specific ner, the name of the synonym that we most often use
+    # in the entire history of news is set as the main name); in reality, we
+    # update only for ner, whose name does not match the target.
     query = """
     UPDATE ner
     SET ner_name = ner_synonym
@@ -404,7 +411,12 @@ def update_main_ner_names_and_types(pg_conn_cfg):
     """
     safe_pg_write_query(pg_conn_cfg, query)
 
-    # Update main ner types
+    # Update main ner types.
+    # Description of the sql query algorithm: the beginning is similar to the
+    # algorithm for revising the main name, but here we select mode (the most
+    # used) as the type from all predicted in the previous results of
+    # ner-pipeline work; we update only where a change is required (the current
+    # and target do not match).
     query = """
     UPDATE ner
     SET id_ner_type = mode_id_ner_type

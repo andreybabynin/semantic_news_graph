@@ -1,5 +1,17 @@
 """Script to put custom ners to database.
 Custom ners in /data/inherim/custom_ners.csv
+
+Important! This script does not revise the news_links table, but only
+revises the default name for ners (additionally sets the custom flag
+for them), in addition, adds and changes synonym links to new ners. In
+total, all links to ner for already processed news will remain the same.
+If we only set the default name, then everything is fine, but if we
+rebuilt the links of several synonyms to the new ner, then the old ners
+will remain in the table.
+In general, now the script is fully suitable for an empty base, or for
+revising names, but not for matching several ners into one (for these
+purposes, the script should be finalized, it's not difficult, but not
+relevant at the moment).
 """
 import os
 import requests
