@@ -8,7 +8,7 @@ from psycopg2.extras import execute_values
 
 # GLOBAL COMMON CONSTANTS
 URL_WIKIDATA_API = "https://www.wikidata.org/w/api.php"
-RE_WIKIDATA_CLEAN_QUERY = re.compile(r"[\"!'«».()+?]")  # clean symbols
+RE_WIKIDATA_CLEAN_QUERY = re.compile(r"[\"!'«».,()+?]")  # clean symbols
 
 
 def safe_pg_write_query(pg_conn_cfg, sql_query, placeholder=None, verbose=False):
@@ -45,7 +45,7 @@ def safe_pg_write_query(pg_conn_cfg, sql_query, placeholder=None, verbose=False)
         print("Error connection to PostgreSQL:\n", error)
         sys.exit(str(error))
     finally:
-        if pg_con:
+        if "pg_con" in locals() and pg_con:
             pg_cur.close()
             pg_con.close()
             if verbose:
@@ -82,7 +82,7 @@ def safe_pg_read_query(pg_conn_cfg, sql_query, placeholder=None, verbose=False):
         print("Error connection to PostgreSQL:\n", error)
         sys.exit(str(error))
     finally:
-        if pg_con:
+        if "pg_con" in locals() and pg_con:
             pg_cur.close()
             pg_con.close()
             if verbose:
@@ -114,7 +114,7 @@ def safe_pg_execute_values(pg_conn_cfg, sql_query, placeholder, verbose=False):
         print("Error connection to PostgreSQL:\n", error)
         sys.exit(str(error))
     finally:
-        if pg_con:
+        if "pg_con" in locals() and pg_con:
             pg_cur.close()
             pg_con.close()
             if verbose:

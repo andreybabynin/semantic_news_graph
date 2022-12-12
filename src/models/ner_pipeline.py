@@ -19,11 +19,8 @@ Description of the algorithm:
 import re
 import os
 import sys
-import requests
-import datetime
 import warnings
-from collections import defaultdict
-from src.common_funcs import safe_pg_read_query, safe_pg_write_query, get_wikidata_qid
+from src.common_funcs import safe_pg_read_query, safe_pg_write_query, SynNamedEntities
 import psycopg2
 from psycopg2 import Error
 from psycopg2.extras import execute_values
@@ -54,6 +51,9 @@ def select_news_to_ner_pip(pg_conn_cfg):
     news_links table there are no records for it, i.e. missing id_news (for
     news for which we cannot extract any ner, in the table news_links is
     written with id_news and id_ner = Null)
+
+    Returns:
+        list of tuples(id_news, news_text, summary_text)
     """
 
     query_news_to_ner_pipeline = """
@@ -73,11 +73,16 @@ def get_norm_ners_from_news(news_to_ner):  # noqa C901
     """Get normalized ners for list news (from summary or full text). If amount
     of ners from summary < 2, trying to get ners from full text.
 
-    news_to_ner list of tuples(id, text, summary)
-    return list of tuples(id_news, tuple("norm_ner1", "norm_ner2", ...))
+    Args:
+        news_to_ner: list of tuples(id, text, summary)
+    Returns:
+        SynNamedEntities: with .ents (filled .name_syn, .ntype, .news_ids),
+                               .news_without_ents
     """
 
-    def ners_extract_normalize(text, min_count_ner=False, verbose=False):
+    def ners_extract_normalize(
+        text, min_count_ner=False, verbose=False, only_stanza=True
+    ):
         """Extract and normalize ners from one doc"""
 
         stanza_ners = stanza_nlp(text).ents  # 90% CPU time
@@ -86,6 +91,16 @@ def get_norm_ners_from_news(news_to_ner):  # noqa C901
         natasha_doc.segment(natasha_segmenter)
         natasha_doc.tag_morph(natasha_morph_tagger)
         natasha_doc.tag_ner(natasha_ner_tagger)
+
+        # UPDATE! We leave only the entities received by stanza,
+        # natasha is used only for normalization (to reduce the
+        # number of duplicates)
+        if only_stanza:
+            natasha_doc.spans = [
+                span
+                for span in natasha_doc.spans
+                if span.text in tuple([ent.text for ent in stanza_ners])
+            ]
 
         natasha_ners_text = tuple([span.text for span in natasha_doc.spans])
         only_stanza_ners = [
@@ -134,8 +149,12 @@ def get_norm_ners_from_news(news_to_ner):  # noqa C901
         """Get normalized ners from one news (from summary or full text). If amount
         of ners from summary < 2, trying to get ners from full text.
 
-        news (tuple(id, text, summary)): one news
-        return: tuple of normalized ners"""
+        Args:
+            news (tuple(id, text, summary)): one news
+        Returns:
+            tuple of tuples((norm ner01, ner_type01),
+                            (norm ner02, ner_type02), ...)
+        """
 
         # get ners from summary
         natasha_doc_spans = ners_extract_normalize(
@@ -146,7 +165,7 @@ def get_norm_ners_from_news(news_to_ner):  # noqa C901
         if natasha_doc_spans is None:
             natasha_doc_spans = ners_extract_normalize(clean_re.sub("", news[1]))
 
-        return tuple(set(map(lambda x: x.normal, natasha_doc_spans)))
+        return tuple(set(map(lambda x: (x.normal, x.type), natasha_doc_spans)))
 
     # pattern to clean news text from ⚡️🎾❗️🌏... and other
     clean_re = re.compile(r"[^\x20-\xFFа-яА-ЯёЁ№\n]+|__|\*\*")
@@ -161,147 +180,96 @@ def get_norm_ners_from_news(news_to_ner):  # noqa C901
     natasha_morph_tagger = natasha.NewsMorphTagger(natasha_emb)
     natasha_ner_tagger = natasha.NewsNERTagger(natasha_emb)
 
-    # output is list of tuple(id_news, tuple("norm_ner1", "norm_ner2", ...))
-    return list(map(lambda x: (x[0], get_norm_ners_from_one_news(x)), news_to_ner))
+    # list of tuple(id_news, ((norm ner01, ner_type01), (norm ner02, ner_type02), ...)
+    news_with_ents = list(
+        map(lambda x: (x[0], get_norm_ners_from_one_news(x)), news_to_ner)
+    )
+
+    synonyms = SynNamedEntities()
+    synonyms.add_ents_from_news(news_with_ents)
+
+    return synonyms
 
 
-def entity_linking(pg_conn_cfg, ner_tuples):
+def entity_linking(pg_conn_cfg, synonyms):
     """Entity linking and preparation of data for writing to the database.
     Algorithm: We try to match based on the local database, if it doesn’t
     work, through an external request to wikidata (we additionally save
     the results of the request to wikidata in local databases).
 
-    ner_tuples: list of tuple(id_news, tuple("norm_ner1", "norm_ner2", ...))
+    Args:
+        synonyms (SynNamedEntities): with
+                 .ents (for each ent filled:
+                        ent.name_syn,
+                        ent.ntype,
+                        ent.news_ids),
+                 .news_without_ents
 
-    return: (new_ner_wikidata_ids, ner_wikidata_ids, ner_ids_news,
-            rows_to_news_links, ner_syn_news_count)
-
-        new_ner_wikidata_ids (list of tuples(ner_name, qid_wikidata)): list
-            of new ners to insert to ner db table; qid_wikidata=None, if is unknown;
-        ner_wikidata_ids (list of tuples(ner_name, qid_wikidata)): ners without
-            found in local synonym database;
-        ner_ids_news (dict("ner1":[news_id2, news_id33],
-                           "ner2":[news_id2, news_id11, ...], ...): ners without
-            found in local synonym database;
-        rows_to_news_links (list of tuples(id_news, id_ner)): to insert into
-            news_links db table, at this stage, here are only ners found in the
-            local database of synonyms;
-        ner_syn_news_count (list of tuples(syn_name, news_count)): for add news_counts
-            into table synonyms_stats (all synonyms found in current processing news);
-
+    Returns:
+        synonyms (SynNamedEntities): with
+                 .ents (for each ent filled:
+                        ent.name_syn,
+                        ent.ntype,
+                        ent.news_ids,
+                        ent.in_synonym_table,
+                        self.wiki_qid - for ents not .in_synonym_table = False
+                                        and succesfull get qid from wikidata API,
+                        self.id_ner - for ents founded in local database by
+                                      syn_name or wikidata_qid),
+                 .news_without_ents
     """
-
-    # Unloading our dictionary of synonyms into memory
+    # 01. Attempt to find ner synonyms in local database (ner_synonyms table),
+    # get dict {ner_synonym01: id_ner01, ...}
     query = """
-    SELECT ner_synonym, id_synonim, id_ner FROM ner_synonyms;
+    SELECT DISTINCT ner_synonym, id_ner FROM ner_synonyms;
     """
-    # list of tuples(ner_synonym, id_synonim, id_ner)
-    synonims_dict = safe_pg_read_query(pg_conn_cfg, query)
-    # convert to dict { 'ner_synonym': (id_synonim, id_ner)}
-    synonims_dict = {
-        ner_syn: (id_syn, id_ner) for ner_syn, id_syn, id_ner in synonims_dict
-    }
+    db_syn_name2id = dict(safe_pg_read_query(pg_conn_cfg, query))
 
-    # default value for defaultdict
-    def def_value():
-        return []
-
-    # ner_ids_news is dict("ner1":[news_id2, news_id33],
-    #                      "ner2":[news_id2, news_id11, ...],
-    #                      ...)
-    ner_ids_news = defaultdict(def_value)
-    news_without_ners = []
-    for news_id, ner_tuple in ner_tuples:
-        if ner_tuple != ():
-            for ner in ner_tuple:
-                ner_ids_news[ner].append(news_id)
-        else:
-            news_without_ners.append(news_id)
-
-    # from defaultdict to normal dict
-    ner_ids_news = dict(ner_ids_news)
-
-    # list of tuples(synonym_name, news_count)
-    # for add news_count into table synonyms_stats (will come later)
-    ner_syn_news_count = [(syn, len(news)) for syn, news in ner_ids_news.items()]
-
-    #######################################
-    # find ner synonyms in local database
-
-    # list of tuples(id_news, id_ner) to insert into news_links db table
-    rows_to_news_links = [(id_news, None) for id_news in news_without_ners]
-    found_ners = []
-    for ner, ids_news in ner_ids_news.items():
-        if ner in synonims_dict:
-            rows_to_news_links.extend(
-                list(zip(ids_news, [synonims_dict[ner][1]] * len(ids_news)))
-            )
-            found_ners.append(ner)
-
-    # delele ners found in local database
-    for ner in found_ners:
-        del ner_ids_news[ner]
-
-    session = requests.Session()
-    ner_wikidata_ids = list(
-        zip(
-            ner_ids_news.keys(),
-            map(lambda x: get_wikidata_qid(x, session), ner_ids_news.keys()),
-        )
-    )
-
-    #######################################
-    # Form data to be added to the ner database table
-    # (new ners that are not in the database)
-
-    # first, we get a list of qid_wikidata that are already in the table ner
+    # get dict {name_for_match01: id_ner01, ...}
     query = """
-    SELECT qid_wikidata FROM ner
-    WHERE qid_wikidata IS NOT Null;
+    SELECT DISTINCT name_for_match, id_ner
+    FROM ner_synonyms
+    WHERE name_for_match IS NOT Null;
     """
-    # list of exist qid_wikidata
-    exist_qid_wikidata = list(
-        map(lambda x: x[0], safe_pg_read_query(pg_conn_cfg, query))
-    )
+    db_syn_match2id = dict(safe_pg_read_query(pg_conn_cfg, query))
+    synonyms.search_in_synonym_table(db_syn_name2id, db_syn_match2id)
 
-    ner_without_qid = []
-    new_ner_wikidata_ids = defaultdict(def_value)
-    for ner, qid in [
-        row for row in ner_wikidata_ids if row[1] not in exist_qid_wikidata
-    ]:
-        if qid is not None:
-            new_ner_wikidata_ids[qid].append(ner)
-        else:
-            ner_without_qid.append(ner)
+    # 02. Attempt to match entity by qid_wikidata in ner table
 
-    # for main ner_name select a synonym that is mentioned in the maximum number of news
-    new_ner_wikidata_ids = [
-        (max(ners, key=lambda x: len(ner_ids_news[x])), qid)
-        for qid, ners in new_ner_wikidata_ids.items()
-    ]
-    # add ners without qid
-    new_ner_wikidata_ids.extend([(ner, None) for ner in ner_without_qid])
+    if synonyms.count_without_id_ner > 0:
+        # query to wikidata API for get qid for entities without id_ner
+        synonyms.search_wikidata_qid()
 
-    return (
-        new_ner_wikidata_ids,
-        ner_wikidata_ids,
-        ner_ids_news,
-        rows_to_news_links,
-        ner_syn_news_count,
-    )
+        query = """
+        SELECT qid_wikidata, id_ner FROM ner
+        WHERE qid_wikidata IS NOT Null;
+        """
+        # dict of ents with exist qid_wikidata {"qid_wikidata01": id_ner01, ...}
+        db_ner_qid2id = dict(safe_pg_read_query(pg_conn_cfg, query))
+        synonyms.match_by_wikidata_qid(db_ner_qid2id)
+
+    return synonyms
 
 
-def write_db_results_ner_pipeline(
-    pg_conn_cfg,
-    new_ner_wikidata_ids,
-    ner_wikidata_ids,
-    ner_ids_news,
-    rows_to_news_links,
-    ner_syn_news_count,
-):
-    """Write the results of the pipeline to the database.
+def write_db_results_ner_pipeline(pg_conn_cfg, synonyms):
+    """Write to the database in single transaction the results of the ner-pipeline.
 
-    Parameters are described in the entity_linking function.
+    Args:
+        synonyms (SynNamedEntities): with
+                 .ents (for each ent filled:
+                        ent.name_syn,
+                        ent.ntype,
+                        ent.news_ids,
+                        ent.in_synonym_table,
+                        self.wiki_qid - for ents not .in_synonym_table = False
+                                        and succesfull get qid from wikidata API,
+                        self.id_ner - for ents founded in local database by
+                                      syn_name or wikidata_qid),
+                 .news_without_ents
+
+    Returns:
+        None: Results write to database.
+
     """
 
     ############################
@@ -317,109 +285,75 @@ def write_db_results_ner_pipeline(
         )
         pg_cur = pg_con.cursor()
 
-        # Adding data to ner table
-        if len(new_ner_wikidata_ids) > 0:
+        # 01. Insert new ents (without .id_ner) to ner table
+        if synonyms.count_without_id_ner > 0:
+            rows_to_ner_table = synonyms.get_rows_to_ner_table()
             query = """
-            INSERT INTO ner(ner_name, qid_wikidata) VALUES %s;
+            INSERT INTO ner(ner_name, id_ner_type, qid_wikidata) VALUES %s;
             """
-            execute_values(pg_cur, query, new_ner_wikidata_ids)
+            execute_values(pg_cur, query, rows_to_ner_table)
 
-        print(
-            "Info: Table ner: {} rows were successfully added.".format(
-                len(new_ner_wikidata_ids)
-            )
-        )
-
-        # Unload the updated table ner into memory
-        query = """
-        SELECT * FROM ner;
-        """
-        pg_cur.execute(query)
-        db_ner_table = pg_cur.fetchall()
-        db_ner_table = list(zip(*db_ner_table))  # flip table
-
-        # Adding the missing data to the ner_synonyms database table
-        rows_to_ner_synonyms = []
-        for name, qid in ner_wikidata_ids:
-            # If qid = None, then match by name, otherwise by qid
-            if qid is None:
-                rows_to_ner_synonyms.append(
-                    (db_ner_table[0][db_ner_table[1].index(name)], name)
-                )
-            else:
-                rows_to_ner_synonyms.append(
-                    (db_ner_table[0][db_ner_table[2].index(qid)], name)
-                )
-
-        # Adding data to the ner_synonyms table
-        if len(rows_to_ner_synonyms) > 0:
+            # 02. Getting missing id_ners's from padded db ner table
+            # get dict {ner_name01: id_ner01, ...}
             query = """
-            INSERT INTO ner_synonyms(id_ner, ner_synonym) VALUES %s;
+            SELECT DISTINCT ner_name, id_ner FROM ner;
             """
-            execute_values(pg_cur, query, rows_to_ner_synonyms)
+            pg_cur.execute(query)
+            db_ner_name2id = dict(pg_cur.fetchall())
 
-        print(
-            "Info: Table ner_synonyms: {} rows were successfully added.".format(
-                len(rows_to_ner_synonyms)
-            )
-        )
+            # get dict {qid_wikidata01: id_ner01, ...}
+            query = """
+            SELECT DISTINCT qid_wikidata, id_ner
+            FROM ner
+            WHERE qid_wikidata IS NOT Null;
+            """
+            pg_cur.execute(query)
+            db_ner_qid2id = dict(pg_cur.fetchall())
 
-        # Unloading our augmented dictionary of synonyms into memory
-        query = """
-        SELECT ner_synonym, id_synonim, id_ner FROM ner_synonyms;
-        """
-        pg_cur.execute(query)
-        # list of tuples(ner_synonym, id_synonim, id_ner)
-        synonims_dict = pg_cur.fetchall()
-        # convert to dict { 'ner_synonym': (id_synonim, id_ner)}
-        synonims_dict = {
-            ner_syn: (id_syn, id_ner) for ner_syn, id_syn, id_ner in synonims_dict
-        }
+            synonyms.match_by_ner_table(db_ner_name2id, db_ner_qid2id)
 
-        # repeat find ner synonyms in updated local database
+        assert synonyms.count_without_id_ner == 0
 
-        # list of tuples(id_news, id_ner) to insert into news_links db table
-        found_ners = []
-        for ner, ids_news in ner_ids_news.items():
-            if ner in synonims_dict:
-                rows_to_news_links.extend(
-                    list(zip(ids_news, [synonims_dict[ner][1]] * len(ids_news)))
-                )
-                found_ners.append(ner)  # only for assert check
+        print(f"Info: Table ner: {len(rows_to_ner_table)} rows added.")
 
-        assert len(found_ners) == len(ner_ids_news)
+        # 03. Insert new ents to ner_synonyms table
+        rows_to_ner_syn = synonyms.get_rows_to_synonyms_table()
 
-        # Adding data to the news_links table
+        if len(rows_to_ner_syn) > 0:
+            query = """
+            INSERT INTO ner_synonyms(id_ner, ner_synonym, name_for_match) VALUES %s;
+            """
+            execute_values(pg_cur, query, rows_to_ner_syn)
+
+        print(f"Info: Table ner_synonyms: {len(rows_to_ner_syn)} rows added.")
+
+        # 04. Insert rows to db news_links table
+        rows_to_news_links = synonyms.get_rows_to_news_links_table()
         query = """
         INSERT INTO news_links(id_news, id_ner) VALUES %s;
         """
         execute_values(pg_cur, query, rows_to_news_links)
+        print(f"Info: Table news_links: {len(rows_to_news_links)} rows added.")
 
-        print(
-            "Info: Table news_links: {} rows were successfully added.".format(
-                len(rows_to_news_links)
-            )
-        )
+        # 05. Insert statistic (e.g. news_count) to synonyms_stats table
+        # Get ner_synonym ids from database
+        query = """
+        SELECT ner_synonym, id_synonim FROM ner_synonyms;
+        """
+        pg_cur.execute(query)
+        # dict('ner_synonym01': id_synonim01, ...)
+        syn_ids_dict = dict(pg_cur.fetchall())
+        rows_to_syn_stats = synonyms.get_rows_to_synonyms_stats(syn_ids_dict)
 
-        # add news_count to synonyms_stats
-        date_processed = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        id_model = 2  # task: change to get id_model by type/stage
-        rows_to_synonyms_stats = [
-            (synonims_dict[ner_syn][0], news_count, date_processed, id_model)
-            for ner_syn, news_count in ner_syn_news_count
-        ]
-        if len(rows_to_synonyms_stats) > 0:
+        if len(rows_to_syn_stats) > 0:
             query = """
-            INSERT INTO synonyms_stats(id_synonim, news_count, date_processed, id_model)
+            INSERT INTO synonyms_stats(id_synonim, news_count,
+                                       date_processed, id_model, id_ner_type)
             VALUES %s;
             """
-            execute_values(pg_cur, query, rows_to_synonyms_stats)
+            execute_values(pg_cur, query, rows_to_syn_stats)
 
-        print(
-            "Info: Table synonyms_stats: {} rows were successfully added.".format(
-                len(rows_to_synonyms_stats)
-            )
-        )
+        print(f"Info: Table synonyms_stats: {len(rows_to_syn_stats)} rows added.")
 
         ##########################
         # END SINGLE TRANSACTION #
@@ -431,12 +365,13 @@ def write_db_results_ner_pipeline(
         print("Error connection to PostgreSQL:\n", error)
         sys.exit(str(error))
     finally:
-        if pg_con:
+        if "pg_con" in locals() and pg_con:
             pg_cur.close()
             pg_con.close()
 
 
-def update_main_ner_names_last_processed(pg_conn_cfg):
+def update_main_ner_names_and_types(pg_conn_cfg):
+    # Update main ner names
     query = """
     UPDATE ner
     SET ner_name = ner_synonym
@@ -468,6 +403,33 @@ def update_main_ner_names_last_processed(pg_conn_cfg):
     """
     safe_pg_write_query(pg_conn_cfg, query)
 
+    # Update main ner types
+    query = """
+    UPDATE ner
+    SET id_ner_type = mode_id_ner_type
+    FROM
+        (SELECT id_ner, mode_id_ner_type, id_ner_type
+         FROM
+            (SELECT id_ner, mode() WITHIN GROUP (ORDER BY synonyms_stats.id_ner_type)
+                            AS mode_id_ner_type
+             FROM
+                (SELECT DISTINCT id_ner
+                 FROM
+                    (SELECT id_synonim
+                     FROM synonyms_stats
+                     WHERE date_processed = (SELECT MAX(date_processed)
+                                             FROM synonyms_stats)) syns
+                    LEFT JOIN ner_synonyms USING(id_synonim)) ner_ids
+                LEFT JOIN ner_synonyms USING(id_ner)
+                INNER JOIN synonyms_stats USING(id_synonim)
+             GROUP BY id_ner) mode_types
+             INNER JOIN ner USING(id_ner)
+         WHERE id_ner_type IS Null OR
+               mode_id_ner_type <> id_ner_type) types_to_update
+    WHERE ner.id_ner = types_to_update.id_ner;
+    """
+    safe_pg_write_query(pg_conn_cfg, query)
+
 
 def ner_pipeline(pg_conn_cfg):
     """All ner pipeline function."""
@@ -475,20 +437,20 @@ def ner_pipeline(pg_conn_cfg):
     # 1. Select news for their transfer to the ner-pipeline
     news_to_ner = select_news_to_ner_pip(pg_conn_cfg)
 
-    # # Unit-Test
-    # news_to_ner = news_to_ner[:50]
+    # Unit-Test
+    # news_to_ner = news_to_ner[:5000]
 
     print("Info: {} news selected to ner pipeline.".format(len(news_to_ner)))
 
     if len(news_to_ner) > 0:
         # 2. Ner extraction and normilization
-        ner_tuples = get_norm_ners_from_news(news_to_ner)
+        synonyms = get_norm_ners_from_news(news_to_ner)
         # 3. Entity linking
-        entity_linking_output = entity_linking(pg_conn_cfg, ner_tuples)
+        synonyms = entity_linking(pg_conn_cfg, synonyms)
         # 4. Write results to database
-        write_db_results_ner_pipeline(pg_conn_cfg, *entity_linking_output)
+        write_db_results_ner_pipeline(pg_conn_cfg, synonyms)
         # 5. Update default тук names if needed
-        update_main_ner_names_last_processed(pg_conn_cfg)
+        update_main_ner_names_and_types(pg_conn_cfg)
 
 
 if __name__ == "__main__":
