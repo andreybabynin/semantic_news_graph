@@ -297,6 +297,11 @@ def about_func():
     return render_template("about.html")
 
 
+@app.route("/FAQ", methods=["GET", "POST"])
+def faq_func():
+    return render_template("FAQ.html")
+
+
 def main():
     app.run(host="0.0.0.0", debug=True)
 
