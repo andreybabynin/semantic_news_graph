@@ -1,8 +1,8 @@
 var svg = d3.select("svg").style("font", "12px sans-serif").call(d3.zoom().on("zoom", function () {
-       svg.attr("transform", d3.event.transform)
-    }))
+  svg.attr("transform", d3.event.transform)
+}))
   .append("g")
-, // если убрать style  шрифт поменяется
+  , // если убрать style  шрифт поменяется
   width = +svg.attr("width"),
   height = +svg.attr("height")
   ;
@@ -25,7 +25,7 @@ svg.append("svg:defs").selectAll("marker")
 
 
 
-var color = d3.scaleOrdinal(d3.schemeCategory20);
+// var color = d3.scaleOrdinal(d3.schemeCategory20); // рандомная раскраска вершин графа (1 из 2)
 
 var simulation = d3.forceSimulation()
   .force("link", d3.forceLink().id(function (d) { return d.id; }))
@@ -63,11 +63,24 @@ d3.json("/data", function (error, graph) {
   var circle = node.append('circle')
     .attr('r', 10)
     .attr('stroke', 'black')
-    .attr('fill', function (d, i) { return color(i); })
+    .attr('fill', function (d, i) {
+      switch (d.id.split('#')[1]) {
+        case "PER":
+          return "#008000"; // Green
+        case "LOC":
+          return "#FFD700"; // Gold
+        case "ORG":
+          return "#FA8072"; // Salmon
+        case "MISC":
+          return "#87CEEB"; // SkyBlue
+      }
+      return "#FFFFFF";
+      // return color(i); // рандомная раскраска вершин графа (2 из 2)
+    })
 
   var labels = node.append("text")
     .text(function (d) {
-      return d.id;
+      return d.id.split('#')[0];
     })
     .attr('x', 12)
     .attr('y', 3);
@@ -105,21 +118,21 @@ d3.json("/data", function (error, graph) {
 
   function clicked(d, i) {     // Передать данные линии и отображение текста
     var tooltip = d3.select("#my_dataviz")
-          .append("div")
-          .attr('id', 'div_info')
-            .style("position", "absolute")
-            .style("visibility", "hidden")
-            .attr('text-anchor', 'middle')
-            .text(d.news)
-            .on("click", function(){return tooltip.style("visibility", "hidden");});
+      .append("div")
+      .attr('id', 'div_info')
+      .style("position", "absolute")
+      .style("visibility", "hidden")
+      .attr('text-anchor', 'middle')
+      .text(d.news)
+      .on("click", function () { return tooltip.style("visibility", "hidden"); });
 
     d3.selectAll("#div_info").style("visibility", "hidden")
     tooltip.style("visibility", "visible")
-           .style("top", (event.pageY))
-           .style("left",(event.pageX))
-           .style('width', "px")
-		   .style('height',"px")
-		;
+      .style("top", (event.pageY))
+      .style("left", (event.pageX))
+      .style('width', "px")
+      .style('height', "px")
+      ;
 
   }
 

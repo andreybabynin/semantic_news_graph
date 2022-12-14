@@ -147,12 +147,10 @@ def compute_triplets(
     if founded_ner is None or df_news is None or df_nlinks is None:
         return pd.DataFrame(
             {
-                "source": ["no_node1"],
-                "s_type": ["no_type1"],
-                "target": ["no_node2"],
-                "t_type": ["no_type2"],
-                "amount": [0],
-                "news": [["no news"]],
+                "source": ["bad-PER#PER", "bad-LOC#LOC", "bad-ORG#ORG"],
+                "target": ["bad-ORG#ORG", "bad-MISC#MISC", "bad-LOC#LOC"],
+                "amount": [0, 0, 0],
+                "news": [["nonews"], ["nonews"], ["nonews"]],
             }
         )
 
@@ -207,9 +205,11 @@ def compute_triplets(
 
         df_nlinks = df_nlinks[df_nlinks.id_news.isin(prev_lvls_idx)]
 
-    re_clean_name = re.compile(r"[^a-zA-Zа-яА-Я0-9 -+№%]+")
-    df_nlinks["ner_name"] = df_nlinks.apply(
-        lambda x: (re_clean_name.sub("", x.ner_name), x.ner_type), axis=1
+    re_clean_name = re.compile(r"[^a-zA-Zа-яА-Я0-9 \-+№%]+")
+    df_nlinks["ner_name"] = (
+        df_nlinks.ner_name.map(lambda x: re_clean_name.sub("", x))
+        + "#"
+        + df_nlinks.ner_type
     )
     df_nlinks.drop(columns="ner_type", inplace=True)
 
@@ -234,14 +234,11 @@ def compute_triplets(
     if min_news_count > 1:
         df_triples = df_triples[df_triples.amount >= min_news_count]
 
-    df_triples[["source", "s_type", "target", "t_type"]] = pd.DataFrame(
-        df_triples["ner_name"]
-        .map(lambda x: (x[0][0], x[0][1], x[1][0], x[1][1]))
-        .to_list(),
-        index=df_triples.index,
+    df_triples[["source", "target"]] = pd.DataFrame(
+        df_triples["ner_name"].tolist(), index=df_triples.index
     )
 
-    df_triples = df_triples[["source", "s_type", "target", "t_type", "amount", "news"]]
+    df_triples = df_triples[["source", "target", "amount", "news"]]
 
     return df_triples
 
@@ -252,8 +249,8 @@ def build_network(graph_query):
 
     G = nx.from_pandas_edgelist(
         df_triples,
-        source=["source", "s_type"],
-        target=["target", "t_type"],
+        source="source",
+        target="target",
         edge_attr=["amount", "news"],
         create_using=nx.Graph(),
     )
