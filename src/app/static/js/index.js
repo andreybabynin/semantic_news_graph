@@ -181,3 +181,51 @@ function dragended(d) {
   d.fy = null;
 }
 
+function save_data_to_localstorage(input_id) {
+   const input_val = document.getElementById(input_id).value;
+   localStorage.setItem(input_id, input_val);
+   console.log(input_val);
+}
+
+
+input_txt_1.addEventListener("keyup", function() {
+   save_data_to_localstorage("input_txt_1");
+});
+
+input_date_1.addEventListener("keyup", function() {
+   save_data_to_localstorage("input_date_1")
+});
+
+input_date_2.addEventListener("keyup", function() {
+   save_data_to_localstorage("input_date_2");
+});
+
+input_num_1.addEventListener("keyup", function() {
+   save_data_to_localstorage("input_num_1");
+});
+
+input_num_2.addEventListener("keyup", function() {
+   save_data_to_localstorage("input_num_2");
+});
+
+
+function init_values() {
+   if (localStorage["input_txt_1"]) {
+      input_txt_1.value = localStorage["input_txt_1"];
+   }
+
+   if (localStorage["input_date_1"]) {
+      input_date_1.value = localStorage["input_date_1"];
+   }
+   if (localStorage["input_date_2"]) {
+      input_date_2.value = localStorage["input_date_2"];
+   }
+   if (localStorage["input_num_1"]) {
+      input_num_1.value = localStorage["input_num_1"];
+   }
+   if (localStorage["input_num_2"]) {
+      input_num_2.value = localStorage["input_num_2"];
+   }
+}
+
+init_values();
