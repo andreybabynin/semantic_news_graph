@@ -188,23 +188,23 @@ function save_data_to_localstorage(input_id) {
 }
 
 
-input_txt_1.addEventListener("keyup", function() {
+input_txt_1.addEventListener("change", function() {
    save_data_to_localstorage("input_txt_1");
 });
 
-input_date_1.addEventListener("keyup", function() {
+input_date_1.addEventListener("change", function() {
    save_data_to_localstorage("input_date_1")
 });
 
-input_date_2.addEventListener("keyup", function() {
+input_date_2.addEventListener("change", function() {
    save_data_to_localstorage("input_date_2");
 });
 
-input_num_1.addEventListener("keyup", function() {
+input_num_1.addEventListener("change", function() {
    save_data_to_localstorage("input_num_1");
 });
 
-input_num_2.addEventListener("keyup", function() {
+input_num_2.addEventListener("change", function() {
    save_data_to_localstorage("input_num_2");
 });
 
