@@ -124,7 +124,8 @@ d3.json("/data", function (error, graph) {
       .style("visibility", "hidden")
       .attr('text-anchor', 'middle')
       .text(d.news)
-      .on("click", function () { return tooltip.style("visibility", "hidden"); });
+      .on("click", function () { return tooltip.style("visibility", "hidden"); })
+      ;
 
     d3.selectAll("#div_info").style("visibility", "hidden")
     tooltip.style("visibility", "visible")
@@ -181,8 +182,6 @@ function dragended(d) {
   d.fy = null;
 }
 
-
-//save values in input 
 function save_data_to_localstorage(input_id) {
    const input_val = document.getElementById(input_id).value;
    localStorage.setItem(input_id, input_val);
@@ -243,8 +242,7 @@ if (day < 10) day = "0" + day;
 var today = year + "-" + month + "-" + day;
 document.getElementById('input_date_2').value = today;
 
-/*var Date_start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')
-document.getElementById('input_date_1').value = Date_start
-/*new Date() - create Date object from calculated milliseconds time.
-Date.now() - gives time in milliseconds from 1970 to now.
-7 (days) * 24 (hours) * 60 (minutes) * 60 (seconds) * 1000 (milliseconds ) = 604800000 (7 days in milliseconds).*/
+var Date_start = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB') // -14 дней (1-я цифра кол-во дней)
+var words = Date_start.split('/');
+var new_date_start = words[2] + "-" + words[1] + "-" + words[0]
+document.getElementById('input_date_1').value = new_date_start;
