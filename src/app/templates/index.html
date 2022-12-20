@@ -4,7 +4,50 @@
 Network graph
 {% endblock %}
 
-#"
+
+{% block legend %}
+<style>
+         #circle1 {
+            width: 30px;
+            height: 30px;
+            -webkit-border-radius: 25px;
+            -moz-border-radius: 25px;
+            border-radius: 25px;
+            background: #008000;
+         }
+         #circle2 {
+            width: 30px;
+            height: 30px;
+            -webkit-border-radius: 25px;
+            -moz-border-radius: 25px;
+            border-radius: 25px;
+            background: #FFD700;
+         }
+         #circle3 {
+            width: 30px;
+            height: 30px;
+            -webkit-border-radius: 25px;
+            -moz-border-radius: 25px;
+            border-radius: 25px;
+            background: #FA8072;
+         }
+         #circle4 {
+            width: 30px;
+            height: 30px;
+            -webkit-border-radius: 25px;
+            -moz-border-radius: 25px;
+            border-radius: 25px;
+            background: #87CEEB;
+         }
+</style>
+
+<div id="circle1" class="container">PER</div>
+<div id="circle2" class="container">LOC</div>
+<div id="circle3" class="container">ORG</div>
+<div id="circle4" class="container">MISC</div>
+
+{% endblock %}
+
 {% block body %}
 <div align='center' id="my_dataviz">
     <form action="" method='POST'>
@@ -15,9 +58,9 @@ Network graph
         </div>
 
         <label for="date_min">Date start</label>
-        <input type="date" value="2022-11-14" name="date_min" id="input_date_1">
+        <input type="date"  name="date_min" id="input_date_1">
         <label for="date_max">Date end</label>
-        <input type="date" name="date_max" id="input_date_2">
+        <input type="date"  name="date_max" id="input_date_2">
         <label for="graph_depth">Graph depth</label>
         <input type="number" value="1" name="graph_depth" id="input_num_1">
         <label for="min_news_count">Min news count (on edge)</label>
