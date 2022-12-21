@@ -3,6 +3,7 @@ import re
 import os
 from itertools import combinations
 from flask import Flask, render_template, request, jsonify, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 from waitress import serve
 import pandas as pd
 import networkx as nx
@@ -309,10 +310,16 @@ def faq_func():
     return render_template("FAQ.html")
 
 
-def main():
-    app.run(host="0.0.0.0", port=5000, debug=True)  # for debugging, not production
-    serve(app, host="0.0.0.0", port=5000)  # for production
+def main(production=True):
+    if production:
+        # for production
+        # https://flask.palletsprojects.com/en/2.2.x/deploying/
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+        serve(app, host="0.0.0.0", port=5000)
+    else:
+        # for debugging, not production
+        app.run(host="0.0.0.0", port=5000, debug=True)
 
 
 if __name__ == "__main__":
-    main()
+    main(production=True)
