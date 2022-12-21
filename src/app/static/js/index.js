@@ -117,12 +117,11 @@ d3.json("/data", function (error, graph) {
 
 
   function clicked(d, i) {     // Передать данные линии и отображение текста
-
     if (document.getElementById("div_info")) {
       var tooltip = d3.select("#my_dataviz")
         .select("#div_info")
         .style("visibility", "hidden")
-        .text(d.news[0].join('<br>'))
+        .text(d.news.join('<br>'))
         ;
     } else {
       var tooltip = d3.select("#my_dataviz")
@@ -131,7 +130,7 @@ d3.json("/data", function (error, graph) {
         .style("position", "static")
         .style("visibility", "hidden")
         .attr('text-anchor', 'middle')
-        .text(d.news[0].join('<br>'))
+        .text(d.news.join('<br>'))
         .on("click", function () { return tooltip.style("visibility", "hidden"); })
         ;
     }

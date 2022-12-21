@@ -153,9 +153,9 @@ def compute_triplets(
                 "target": ["bad-ORG#ORG", "bad-MISC#MISC", "bad-LOC#LOC"],
                 "amount": [0, 0, 0],
                 "news": [
-                    [["nonews00", "nonews01", "nonews02"]],
-                    [["nonews2"]],
-                    [["nonews3"]],
+                    ["nonews00", "nonews01", "nonews02"],
+                    ["nonews2"],
+                    ["nonews3"],
                 ],
             }
         )
