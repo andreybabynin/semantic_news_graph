@@ -5,6 +5,7 @@ from itertools import combinations
 from flask import Flask, render_template, request, jsonify, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from waitress import serve
+from datetime import datetime, timedelta
 import pandas as pd
 import networkx as nx
 import psycopg2
@@ -279,10 +280,11 @@ def index_func():
         }
     else:
         graph_query = {
-            "input_ner": "",
-            "date_min": "2022-08-01",
-            "date_max": "2022-08-31",
-            "min_news_count": 5,
+            "input_ner": "Россия",
+            "date_min": (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d"),
+            "date_max": datetime.now().strftime("%Y-%m-%d"),
+            "graph_depth": 2,
+            "min_news_count": 4,
         }
 
     session["graph_query"] = graph_query

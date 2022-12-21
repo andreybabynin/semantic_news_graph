@@ -9,4 +9,3 @@ networkx==2.8.8
 psycopg2-binary==2.9.5
 flask
 waitress
-
