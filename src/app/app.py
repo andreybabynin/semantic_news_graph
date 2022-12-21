@@ -3,6 +3,7 @@ import re
 import os
 from itertools import combinations
 from flask import Flask, render_template, request, jsonify, session
+from waitress import serve
 import pandas as pd
 import networkx as nx
 import psycopg2
@@ -309,7 +310,8 @@ def faq_func():
 
 
 def main():
-    app.run(host="0.0.0.0", debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)  # for debugging, not production
+    serve(app, host="0.0.0.0", port=5000)  # for production
 
 
 if __name__ == "__main__":
