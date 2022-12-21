@@ -117,15 +117,24 @@ d3.json("/data", function (error, graph) {
 
 
   function clicked(d, i) {     // Передать данные линии и отображение текста
-    var tooltip = d3.select("#my_dataviz")
-      .append("div")
-      .attr('id', 'div_info')
-      .style("position", "absolute")
-      .style("visibility", "hidden")
-      .attr('text-anchor', 'middle')
-      .text(d.news)
-      .on("click", function () { return tooltip.style("visibility", "hidden"); })
-      ;
+
+    if (document.getElementById("div_info")) {
+      var tooltip = d3.select("#my_dataviz")
+        .select("#div_info")
+        .style("visibility", "hidden")
+        .text(d.news[0].join('<br>'))
+        ;
+    } else {
+      var tooltip = d3.select("#my_dataviz")
+        .append("div")
+        .attr('id', 'div_info')
+        .style("position", "static")
+        .style("visibility", "hidden")
+        .attr('text-anchor', 'middle')
+        .text(d.news[0].join('<br>'))
+        .on("click", function () { return tooltip.style("visibility", "hidden"); })
+        ;
+    }
 
     d3.selectAll("#div_info").style("visibility", "hidden")
     tooltip.style("visibility", "visible")
@@ -134,6 +143,9 @@ d3.json("/data", function (error, graph) {
       .style('width', "px")
       .style('height', "px")
       ;
+    // преобразовываем текст новостей в HTML для того, что бы он переносился на основе тегов <br>
+    // изначально текст в объекте d3 представлен как innerText и все теги экранируются 
+    document.getElementById("div_info").innerHTML = document.getElementById("div_info").innerText
 
   }
 
@@ -183,50 +195,50 @@ function dragended(d) {
 }
 
 function save_data_to_localstorage(input_id) {
-   const input_val = document.getElementById(input_id).value;
-   localStorage.setItem(input_id, input_val);
-   console.log(input_val);
+  const input_val = document.getElementById(input_id).value;
+  localStorage.setItem(input_id, input_val);
+  console.log(input_val);
 }
 
 
-input_txt_1.addEventListener("change", function() {
-   save_data_to_localstorage("input_txt_1");
+input_txt_1.addEventListener("change", function () {
+  save_data_to_localstorage("input_txt_1");
 });
 
-input_date_1.addEventListener("change", function() {
-   save_data_to_localstorage("input_date_1")
+input_date_1.addEventListener("change", function () {
+  save_data_to_localstorage("input_date_1")
 });
 
-input_date_2.addEventListener("change", function() {
-   save_data_to_localstorage("input_date_2");
+input_date_2.addEventListener("change", function () {
+  save_data_to_localstorage("input_date_2");
 });
 
-input_num_1.addEventListener("change", function() {
-   save_data_to_localstorage("input_num_1");
+input_num_1.addEventListener("change", function () {
+  save_data_to_localstorage("input_num_1");
 });
 
-input_num_2.addEventListener("change", function() {
-   save_data_to_localstorage("input_num_2");
+input_num_2.addEventListener("change", function () {
+  save_data_to_localstorage("input_num_2");
 });
 
 
 function init_values() {
-   if (localStorage["input_txt_1"]) {
-      input_txt_1.value = localStorage["input_txt_1"];
-   }
+  if (localStorage["input_txt_1"]) {
+    input_txt_1.value = localStorage["input_txt_1"];
+  }
 
-   if (localStorage["input_date_1"]) {
-      input_date_1.value = localStorage["input_date_1"];
-   }
-   if (localStorage["input_date_2"]) {
-      input_date_2.value = localStorage["input_date_2"];
-   }
-   if (localStorage["input_num_1"]) {
-      input_num_1.value = localStorage["input_num_1"];
-   }
-   if (localStorage["input_num_2"]) {
-      input_num_2.value = localStorage["input_num_2"];
-   }
+  if (localStorage["input_date_1"]) {
+    input_date_1.value = localStorage["input_date_1"];
+  }
+  if (localStorage["input_date_2"]) {
+    input_date_2.value = localStorage["input_date_2"];
+  }
+  if (localStorage["input_num_1"]) {
+    input_num_1.value = localStorage["input_num_1"];
+  }
+  if (localStorage["input_num_2"]) {
+    input_num_2.value = localStorage["input_num_2"];
+  }
 }
 
 init_values();

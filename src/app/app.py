@@ -150,7 +150,11 @@ def compute_triplets(
                 "source": ["bad-PER#PER", "bad-LOC#LOC", "bad-ORG#ORG"],
                 "target": ["bad-ORG#ORG", "bad-MISC#MISC", "bad-LOC#LOC"],
                 "amount": [0, 0, 0],
-                "news": [["nonews"], ["nonews"], ["nonews"]],
+                "news": [
+                    [["nonews00", "nonews01", "nonews02"]],
+                    [["nonews2"]],
+                    [["nonews3"]],
+                ],
             }
         )
 
@@ -220,7 +224,9 @@ def compute_triplets(
 
     df_nlinks["ner_name"] = df_nlinks.ner_name.map(lambda x: list(combinations(x, 2)))
 
-    df_nlinks["news"] = df_nlinks.news_date.astype(str) + ": " + df_nlinks.summary_text
+    df_nlinks["news"] = (
+        df_nlinks.news_date.dt.strftime("%Y-%m-%d %H:%M: ") + df_nlinks.summary_text
+    )
     df_nlinks = df_nlinks[["ner_name", "news"]]
 
     df_triples = df_nlinks.explode("ner_name")
