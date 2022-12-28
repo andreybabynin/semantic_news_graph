@@ -3,6 +3,9 @@ import re
 import os
 from itertools import combinations
 from flask import Flask, render_template, request, jsonify, session
+from werkzeug.middleware.proxy_fix import ProxyFix
+from waitress import serve
+from datetime import datetime, timedelta
 import pandas as pd
 import networkx as nx
 import psycopg2
@@ -89,13 +92,14 @@ def get_db_data_for_triplets(pg_conn_cfg, input_ner: str, date_min: str, date_ma
                 df_news = pd.read_sql(query, pg_con, index_col=["id_news"])
 
                 query = f"""
-                    SELECT id_news, ner_name
+                    SELECT id_news, ner_name, ner_type
                     FROM (SELECT * FROM news_links
-                        WHERE id_news IN (SELECT id_news FROM news
+                          WHERE id_news IN (SELECT id_news FROM news
                                             WHERE news_date
                                             BETWEEN '{date_min}' AND
                                             '{date_max}')) news_links
-                        INNER JOIN ner USING(id_ner)
+                         INNER JOIN ner USING(id_ner)
+                         LEFT JOIN ner_types USING(id_ner_type)
                 """
                 df_nlinks = pd.read_sql(query, pg_con)
 
@@ -146,10 +150,14 @@ def compute_triplets(
     if founded_ner is None or df_news is None or df_nlinks is None:
         return pd.DataFrame(
             {
-                "source": ["no_node1"],
-                "target": ["no_node2"],
-                "amount": [0],
-                "news": [["no news"]],
+                "source": ["bad-PER#PER", "bad-LOC#LOC", "bad-ORG#ORG"],
+                "target": ["bad-ORG#ORG", "bad-MISC#MISC", "bad-LOC#LOC"],
+                "amount": [0, 0, 0],
+                "news": [
+                    ["nonews00", "nonews01", "nonews02"],
+                    ["nonews2"],
+                    ["nonews3"],
+                ],
             }
         )
 
@@ -204,6 +212,14 @@ def compute_triplets(
 
         df_nlinks = df_nlinks[df_nlinks.id_news.isin(prev_lvls_idx)]
 
+    re_clean_name = re.compile(r"[^a-zA-Zа-яА-Я0-9 \-+№%]+")
+    df_nlinks["ner_name"] = (
+        df_nlinks.ner_name.map(lambda x: re_clean_name.sub("", x))
+        + "#"
+        + df_nlinks.ner_type
+    )
+    df_nlinks.drop(columns="ner_type", inplace=True)
+
     df_nlinks = df_nlinks.groupby("id_news").agg({"ner_name": sorted})
 
     df_nlinks = df_nlinks.merge(df_news, how="left", left_index=True, right_index=True)
@@ -211,7 +227,9 @@ def compute_triplets(
 
     df_nlinks["ner_name"] = df_nlinks.ner_name.map(lambda x: list(combinations(x, 2)))
 
-    df_nlinks["news"] = df_nlinks.news_date.astype(str) + ": " + df_nlinks.summary_text
+    df_nlinks["news"] = (
+        df_nlinks.news_date.dt.strftime("%Y-%m-%d %H:%M: ") + df_nlinks.summary_text
+    )
     df_nlinks = df_nlinks[["ner_name", "news"]]
 
     df_triples = df_nlinks.explode("ner_name")
@@ -262,10 +280,11 @@ def index_func():
         }
     else:
         graph_query = {
-            "input_ner": "",
-            "date_min": "2022-08-01",
-            "date_max": "2022-08-31",
-            "min_news_count": 5,
+            "input_ner": "Россия",
+            "date_min": (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d"),
+            "date_max": datetime.now().strftime("%Y-%m-%d"),
+            "graph_depth": 2,
+            "min_news_count": 4,
         }
 
     session["graph_query"] = graph_query
@@ -288,9 +307,21 @@ def about_func():
     return render_template("about.html")
 
 
-def main():
-    app.run(host="0.0.0.0", debug=True)
+@app.route("/FAQ", methods=["GET", "POST"])
+def faq_func():
+    return render_template("FAQ.html")
+
+
+def main(production=True):
+    if production:
+        # for production
+        # https://flask.palletsprojects.com/en/2.2.x/deploying/
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+        serve(app, host="0.0.0.0", port=5000)
+    else:
+        # for debugging, not production
+        app.run(host="0.0.0.0", port=5000, debug=True)
 
 
 if __name__ == "__main__":
-    main()
+    main(production=True)
