@@ -34,7 +34,7 @@ services:
   telegram_grabber:
     container_name: telegram_grabber_v1
     image: python:3.10-slim
-    command: sh -c "python -m pip install -r ./app/requirements.txt && python ./app/parser/parser.py"
+    command: sh -c "python -m pip install -r ./app/requirements_parser.txt && python ./app/parser/parser.py"
     environment:
       POSTGRES_DB: "news_db"
       POSTGRES_USER: "asdf"
@@ -115,10 +115,10 @@ secrets:
   telegram_secrets:
     file: telegram_secrets.json
 
-  volumes:
-    db_data:
-      external: true
-      name: d_test_db_data
+volumes:
+  db_data:
+    external: true
+    name: d_test_db_data
 
 networks:
   pg_network:
