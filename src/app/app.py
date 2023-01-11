@@ -15,7 +15,6 @@ from psycopg2 import Error
 # Hyperparameters
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-# app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 app.config["SECRET_KEY"] = uuid.uuid4().hex
 
 PG_CONN_CFG = {
@@ -213,6 +212,10 @@ def compute_triplets(
         df_nlinks = df_nlinks[df_nlinks.id_news.isin(prev_lvls_idx)]
 
     re_clean_name = re.compile(r"[^a-zA-Zа-яА-Я0-9 \-+№%]+")
+
+    #highlight self
+    df_nlinks.loc[df_nlinks["ner_name"]==founded_ner, 'ner_type'] = "SELF"
+
     df_nlinks["ner_name"] = (
         df_nlinks.ner_name.map(lambda x: re_clean_name.sub("", x))
         + "#"
@@ -238,10 +241,16 @@ def compute_triplets(
     df_triples = df_triples.groupby("ner_name", as_index=False).agg(
         news=("news", sorted), amount=("news", len)
     )
-
+    
     # drop edges with news amount < min_news_count
+    df_triples['old_1'] = df_triples['ner_name'].apply(lambda x: x[0])
+    df_triples['old_2'] = df_triples['ner_name'].apply(lambda x: x[1])
+
     if min_news_count > 1:
-        df_triples = df_triples[df_triples.amount >= min_news_count]
+        df_triples = df_triples[(df_triples.amount >= min_news_count) | (df_triples['old_1'] == f'{founded_ner}#SELF') | \
+                                (df_triples['old_2'] == f'{founded_ner}#SELF')]
+
+    df_triples.drop(columns=['old_1', 'old_2'], inplace=True)
 
     df_triples[["source", "target"]] = pd.DataFrame(
         df_triples["ner_name"].tolist(), index=df_triples.index
@@ -315,7 +324,6 @@ def faq_func():
 def main(production=True):
     if production:
         # for production
-        # https://flask.palletsprojects.com/en/2.2.x/deploying/
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
         serve(app, host="0.0.0.0", port=5000)
     else:

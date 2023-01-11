@@ -42,12 +42,22 @@ Network graph
         border-radius: 25px;
         background: #87CEEB;
     }
+
+    #circle5 {
+        width: 30px;
+        height: 30px;
+        -webkit-border-radius: 25px;
+        -moz-border-radius: 25px;
+        border-radius: 25px;
+        background: #746d6d;
+    }
 </style>
 
 <div id="circle1" class="container">PER</div>
 <div id="circle2" class="container">LOC</div>
 <div id="circle3" class="container">ORG</div>
 <div id="circle4" class="container">MISC</div>
+<div id="circle5" class="container">SELF</div>
 
 {% endblock %}
 
@@ -55,9 +65,9 @@ Network graph
 <div align='center' id="my_dataviz">
     <form action="" method='POST'>
         <div>
-            <label for="input_ner">NER</label>
+            <label for="input_ner">Search</label>
             <input type="text" value="Россия" name="input_ner" id="input_txt_1">
-            <input type="submit" class="w-10 btn btn-sm btn-outline-primary" style="vertical-align: top>
+            <input type="submit" class="w-10 btn btn-sm btn-outline-primary" style="vertical-align: top">
         </div>
 
         <label for=" date_min">Date start</label>
@@ -75,11 +85,11 @@ Network graph
 
 
 
-    <svg width="1400" height="800">
-        <path stroke="black" fill="none" d="M 0 0 L 1400 0 L 1400 800 L 0 800 Z">
+    <svg width="1400" height="600">
+        <path stroke="black" fill="none" d="M 0 20 L 1400 20 L 1400 600 L 0 600 Z">
         </path>
     </svg>
-    <script type="text/javascript" src="static/js/index.js"></script>
+    <script type="text/javascript" src="static/js/index.js"></script>></script>
 </div>
 
 {% endblock %}>

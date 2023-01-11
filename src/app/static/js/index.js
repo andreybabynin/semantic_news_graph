@@ -73,6 +73,8 @@ d3.json("/data", function (error, graph) {
           return "#FA8072"; // Salmon
         case "MISC":
           return "#87CEEB"; // SkyBlue
+        case "SELF":
+          return  "#000000"; // Black
       }
       return "#FFFFFF";
       // return color(i); // рандомная раскраска вершин графа (2 из 2)
@@ -194,7 +196,7 @@ function dragended(d) {
 }
 
 function save_data_to_localstorage(input_id) {
-  const input_val = document.getElementById(input_id).value;
+  input_val = document.getElementById(input_id).value;
   localStorage.setItem(input_id, input_val);
   console.log(input_val);
 }
@@ -251,9 +253,13 @@ var year = date.getFullYear();
 if (month < 10) month = "0" + month;
 if (day < 10) day = "0" + day;
 var today = year + "-" + month + "-" + day;
-document.getElementById('input_date_2').value = today;
+if (localStorage.getItem("input_date_2") === null) {
+  document.getElementById('input_date_2').value = today;
+}
 
 var Date_start = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB') // -14 дней (1-я цифра кол-во дней)
 var words = Date_start.split('/');
 var new_date_start = words[2] + "-" + words[1] + "-" + words[0]
-document.getElementById('input_date_1').value = new_date_start;
+if (localStorage.getItem("input_date_1") === null){
+  document.getElementById('input_date_1').value = new_date_start;
+}
