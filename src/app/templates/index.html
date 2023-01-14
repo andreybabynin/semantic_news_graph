@@ -4,60 +4,44 @@
 Network graph
 {% endblock %}
 
-
 {% block legend %}
 <style>
     #circle1 {
-        width: 30px;
-        height: 30px;
-        -webkit-border-radius: 25px;
-        -moz-border-radius: 25px;
-        border-radius: 25px;
+        width: 7px;
+        height: 7px;
         background: #008000;
     }
 
     #circle2 {
-        width: 30px;
-        height: 30px;
-        -webkit-border-radius: 25px;
-        -moz-border-radius: 25px;
-        border-radius: 25px;
+        width: 7px;
+        height: 7px;
         background: #FFD700;
     }
 
     #circle3 {
-        width: 30px;
-        height: 30px;
-        -webkit-border-radius: 25px;
-        -moz-border-radius: 25px;
-        border-radius: 25px;
+        width: 7px;
+        height: 7px;
         background: #FA8072;
     }
 
     #circle4 {
-        width: 30px;
-        height: 30px;
-        -webkit-border-radius: 25px;
-        -moz-border-radius: 25px;
-        border-radius: 25px;
+        width: 7px;
+        height: 7px;
         background: #87CEEB;
     }
 
     #circle5 {
-        width: 30px;
-        height: 30px;
-        -webkit-border-radius: 25px;
-        -moz-border-radius: 25px;
-        border-radius: 25px;
+        width: 7px;
+        height: 7px;
         background: #746d6d;
     }
 </style>
 
-<div id="circle1" class="container">PER</div>
-<div id="circle2" class="container">LOC</div>
-<div id="circle3" class="container">ORG</div>
-<div id="circle4" class="container">MISC</div>
-<div id="circle5" class="container">SELF</div>
+<div id="circle1" class="container">Person</div>
+<div id="circle2" class="container">Location</div>
+<div id="circle3" class="container">Organization</div>
+<div id="circle4" class="container">Other</div>
+<div id="circle5" class="container">Root</div>
 
 {% endblock %}
 
@@ -65,31 +49,25 @@ Network graph
 <div align='center' id="my_dataviz">
     <form action="" method='POST'>
         <div>
-            <label for="input_ner">Search</label>
-            <input type="text" value="Россия" name="input_ner" id="input_txt_1">
-            <input type="submit" class="w-10 btn btn-sm btn-outline-primary" style="vertical-align: top">
+            <input type="text" value="Москва" name="input_ner" id="input_txt_1">
+            <input type="submit" class="w-10 btn btn-sm btn-outline-primary" style="vertical-align: top" value="Search">
         </div>
 
-        <label for=" date_min">Date start</label>
-            <input type="date" name="date_min" id="input_date_1">
-            <label for="date_max">Date end</label>
-            <input type="date" name="date_max" id="input_date_2">
-            <label for="graph_depth">Graph depth</label>
-            <input type="number" value="2" name="graph_depth" id="input_num_1">
-            <label for="min_news_count">Min news count (on edge)</label>
-            <input type="number" value="4" name="min_news_count" id="input_num_2">
-
-    </form>
-
-
-
-
+        <label for=" date_min">From</label>
+        <input type="date" name="date_min" id="input_date_1">
+        <label for="date_max">Till</label>
+        <input type="date" name="date_max" id="input_date_2">
+        <label for="graph_depth">Graph depth</label>
+        <input type="number" value="2" name="graph_depth" id="input_num_1" max="5" min="1" value="1">
+        <label for="min_news_count">Min news threshold</label>
+        <input type="number" value="4" name="min_news_count" id="input_num_2" max="20" min="1" value="2">
+   </form>
 
     <svg width="1400" height="600">
-        <path stroke="black" fill="none" d="M 0 20 L 1400 20 L 1400 600 L 0 600 Z">
+        <path stroke="black" fill="none" d="M 0 0 L 1000 0 L 1000 540 L 0 540 Z">
         </path>
     </svg>
-    <script type="text/javascript" src="static/js/index.js"></script>></script>
+    <script type="text/javascript" src="static/js/index.js"></script>>
 </div>
 
-{% endblock %}>
+{% endblock %}

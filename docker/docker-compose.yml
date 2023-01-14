@@ -49,7 +49,7 @@ services:
       - ./:/app
     expose:
       - 8080
-    # restart: unless-stopped
+    restart: unless-stopped
 
   ml_pipelines:
     restart: unless-stopped

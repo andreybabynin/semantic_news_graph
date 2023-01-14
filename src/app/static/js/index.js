@@ -1,36 +1,21 @@
-var svg = d3.select("svg").style("font", "12px sans-serif").call(d3.zoom().on("zoom", function () {
-  svg.attr("transform", d3.event.transform)
-}))
-  .append("g")
-  , // если убрать style  шрифт поменяется
-  width = +svg.attr("width"),
-  height = +svg.attr("height")
-  ;
+var margin = {top: 30, right: 200, bottom: 30, left: 200};
+var width = 1400 - margin.left - margin.right;
+var height = 600 - margin.top - margin.bottom;
 
-/* //arrows (part 1 of 2)
-svg.append("svg:defs").selectAll("marker")
-.data(["end"])      // Different link/path types can be defined here
-.enter().append("svg:marker")    // This section adds in the arrows
-.attr("id", String)
-.attr("viewBox", "0 -5 10 10")
-.attr("refX", 27)
-.attr("refY", 0.5)
-.attr("markerWidth", 7)
-.attr("markerHeight", 7)
-.attr("orient", "auto")
- .attr('fill', '#00000') // #A0A0A0 серый, #00000 черный
- .append("svg:path")
-   .attr("d", "M0,-5L10,0L0,5") */
-
-
-
-
-// var color = d3.scaleOrdinal(d3.schemeCategory20); // рандомная раскраска вершин графа (1 из 2)
+var svg = d3.select("svg")
+            .style("font", "12px sans-serif")
+            .attr('height', height)
+            .attr('width', width)
+            .call(
+              d3.zoom()
+              .on("zoom", function () {
+                svg.attr("transform", d3.event.transform)}))
+            .append("g");
 
 var simulation = d3.forceSimulation()
   .force("link", d3.forceLink().id(function (d) { return d.id; }))
-  .force("charge", d3.forceManyBody().strength(-800)) // мера зазреженности графа (-100 очень ужат, -2000 разрежен)
-  .force("center", d3.forceCenter(1400 / 2, 800 / 2))
+  .force("charge", d3.forceManyBody().strength(-700)) // мера зазреженности графа (-100 очень ужат, -2000 разрежен)
+  .force("center", d3.forceCenter(width / 2, height / 2))
   ;
 
 
@@ -50,15 +35,15 @@ d3.json("/data", function (error, graph) {
     .attr('fill', 'black')
     .attr('stroke', '#A0A0A0')
     .attr("stroke-width", 1)
-    .attr('stroke-opacity', 1)//.attr("marker-end", "url(#end)") //arrows (part 2 of 2)
+    .attr('stroke-opacity', 1)
 
 
-  var node = svg.append("g")
+  var node = svg.append('g')
     .attr("class", "nodes")
     .selectAll("g")
     .data(graph.nodes)
-    .enter().append("g");
-  // изменение прозрачности вершин
+    .enter()
+    .append('g');
 
   var circle = node.append('circle')
     .attr('r', 10)
@@ -77,8 +62,22 @@ d3.json("/data", function (error, graph) {
           return  "#000000"; // Black
       }
       return "#FFFFFF";
-      // return color(i); // рандомная раскраска вершин графа (2 из 2)
     })
+    .call(d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended))
+      .on('mouseover', function (d, i) {
+        d3.select(this).transition()
+          .duration('25')
+          .attr('r', 15);
+      })
+      .on('mouseout', function (d, i) {
+        d3.select(this).transition()
+          .duration('25')
+          .attr('r', '10');
+      })
+      ;
 
   var labels = node.append("text")
     .text(function (d) {
@@ -86,13 +85,6 @@ d3.json("/data", function (error, graph) {
     })
     .attr('x', 12)
     .attr('y', 3);
-  // Create a drag handler and append it to the node object instead
-  var drag_handler = d3.drag()
-    .on("start", dragstarted)
-    .on("drag", dragged)
-    .on("end", dragended);
-
-  drag_handler(node);
 
   var linelabels = line
     .append('text')
@@ -122,35 +114,19 @@ d3.json("/data", function (error, graph) {
     if (document.getElementById("div_info")) {
       var tooltip = d3.select("#my_dataviz")
         .select("#div_info")
-        .style("visibility", "hidden")
+        .style("visibility", "visible")
         .text(d.news.join('<br>'))
         ;
     } else {
       var tooltip = d3.select("#my_dataviz")
         .append("div")
         .attr('id', 'div_info')
-        .style("position", "static")
-        .style("visibility", "hidden")
-        .attr('text-anchor', 'middle')
-        .text(d.news.join('<br>'))
-        .on("click", function () { return tooltip.style("visibility", "hidden"); })
-        ;
     }
 
-    d3.selectAll("#div_info").style("visibility", "hidden")
-    tooltip.style("visibility", "visible")
-      .style("top", (event.pageY))
-      .style("left", (event.pageX))
-      .style('width', "px")
-      .style('height', "px")
-      ;
     // преобразовываем текст новостей в HTML для того, что бы он переносился на основе тегов <br>
-    // изначально текст в объекте d3 представлен как innerText и все теги экранируются 
     document.getElementById("div_info").innerHTML = document.getElementById("div_info").innerText
 
   }
-
-
 
   simulation
     .nodes(graph.nodes)

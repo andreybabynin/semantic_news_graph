@@ -11,11 +11,10 @@ import networkx as nx
 import psycopg2
 from psycopg2 import Error
 
-
-# Hyperparameters
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SECRET_KEY"] = uuid.uuid4().hex
+app.config['JSON_AS_ASCII'] = False
 
 PG_CONN_CFG = {
     "dbname": os.environ.get("POSTGRES_DB"),
@@ -26,247 +25,130 @@ PG_CONN_CFG = {
 with open(os.environ.get("POSTGRES_PASSWORD_FILE"), "r") as f:
     PG_CONN_CFG["password"] = f.readlines()[0].rstrip("\n")
 
+sample_df = pd.DataFrame({"source": ["bad-PER#PER", "bad-LOC#LOC", "bad-ORG#ORG"],
+                        "target": ["bad-ORG#ORG", "bad-MISC#MISC", "bad-LOC#LOC"],
+                        "amount": [0, 0, 0],
+                        "news": [["nonews00", "nonews01", "nonews02"],
+                                ["nonews2"], ["nonews3"]]})
 
-def get_db_data_for_triplets(pg_conn_cfg, input_ner: str, date_min: str, date_max: str):
+def get_db_data_for_triplets(pg_conn_cfg, input_ner: str, date_min: str, date_max: str, depth: int):
 
-    # clean input ner (prevent from sql injection)
+    # clean input ner
     input_ner = re.sub(r"[^a-zA-Zа-яА-ЯёЁ№0-9 ]+", "", input_ner)
+    founded_ner = None
+    df_query = []
 
-    # check query dates to sql injection
-    date_pattern = r"\d\d\d\d-\d\d-\d\d"
-    if re.fullmatch(date_pattern, date_min) and re.fullmatch(date_pattern, date_max):
-        try:
-            pg_con = psycopg2.connect(
-                dbname=pg_conn_cfg["dbname"],
-                user=pg_conn_cfg["user"],
-                password=pg_conn_cfg["password"],
-                host=pg_conn_cfg["host"],
-                port=pg_conn_cfg["port"],
-            )
+    try:
+        pg_con = psycopg2.connect(**pg_conn_cfg)
 
-            # fuzzy search by input ner
-            if len(input_ner) > 0:
-                query = """
-                SELECT CASE WHEN %(input_ner)s IN (SELECT ner_synonym
-                                                   FROM ner_synonyms)
-                    THEN
-                    (SELECT ner_name
-                        FROM ner
-                        WHERE id_ner = (SELECT id_ner
-                                        FROM ner_synonyms
-                                        WHERE %(input_ner)s = ner_synonym
-                                        LIMIT 1))
-                        ELSE
-                        (SELECT ner_name
-                        FROM ner
-                        WHERE id_ner =
-                            (SELECT id_ner
-                             FROM ner_synonyms
-                             ORDER BY SIMILARITY(ner_synonym, %(input_ner)s) DESC,
-                                   ABS(LENGTH(ner_synonym) - LENGTH(%(input_ner)s)) ASC
-                             LIMIT 1))
-                        END;
-                """
-                pg_cur = pg_con.cursor()
-                pg_cur.execute(query, {"input_ner": input_ner})
-                res = pg_cur.fetchall()
-                pg_cur.close()
-                if len(res) > 0:
-                    founded_ner = res[0][0]
-                else:
-                    founded_ner = None
-            else:
-                founded_ner = ""
+        # synonyms search for input ner
+        if len(input_ner) > 0:
+            query = """
+                with t as (
+                    select id_ner
+                    from ner_synonyms
+                            ORDER BY SIMILARITY(ner_synonym, %(input_ner)s) desc 
+                            limit 1)
+                select ner_name
+                    from ner join t on t.id_ner = ner.id_ner;
+                    """
+            pg_cur = pg_con.cursor()
+            pg_cur.execute(query, {"input_ner": input_ner})
+            res = pg_cur.fetchall()
+            founded_ner = res[0][0]
+            pg_cur.close()           
 
-            if founded_ner is not None:
-                # query to db for get news sample in date range
-                query = f"""
-                    SELECT id_news, summary_text, news_date
-                    FROM (SELECT * FROM news
-                        WHERE news_date
-                                BETWEEN '{date_min}' AND
-                                        '{date_max}') news
-                        INNER JOIN news_summary USING(id_news)
-                """
-                df_news = pd.read_sql(query, pg_con, index_col=["id_news"])
+        if founded_ner is not None:
+            query = f"""
+                    with recursive t1 as (select id_ner, ner_name, id_news, ner_type, news_date
+                        from ner join news_links nl using(id_ner)
+                                    join news using(id_news)
+                                    join ner_types using(id_ner_type)
+                        where news_date BETWEEN '{date_min}' and '{date_max}' 
+                        ),
+                    t3 as 
+                        (select t1.id_news, t1.ner_name as source, t1.id_ner as source_id, 
+                                        t1.ner_type as source_type, 
+                                        t2.ner_name as target, t2.id_ner as target_id,
+                                        t2.ner_type as target_type,
+                                        t1.news_date
+                            from t1, t1 as t2
+                            where t1.ner_name <> t2.ner_name
+                                and t1.id_news = t2.id_news
+                        ),
+                    tr as (select id_news, news_date, source, source_id, source_type, 
+                                target, target_id, target_type, 1 as depth
+                            from t3
+                                where t3.source='{founded_ner}'
+                        union
+                            select t3.id_news, t3.news_date, tr.target, tr.target_id, tr.target_type,
+                                    t3.target, t3.target_id, t3.target_type, depth+1
+                            from tr, t3
+                            where tr.target = t3.source
+                                and tr.id_news <> t3.id_news ---для того чтобы избежать полного графа A -> B -> C -> A
+                                and depth<{depth}
+                        )
+                    select id_news, news_date, source, source_id, source_type, 
+                                target, target_id, target_type, summary_text, depth
+                    from tr join news_summary using (id_news)              
+                    """
+            df_query = pd.read_sql(query, pg_con)
 
-                query = f"""
-                    SELECT id_news, ner_name, ner_type
-                    FROM (SELECT * FROM news_links
-                          WHERE id_news IN (SELECT id_news FROM news
-                                            WHERE news_date
-                                            BETWEEN '{date_min}' AND
-                                            '{date_max}')) news_links
-                         INNER JOIN ner USING(id_ner)
-                         LEFT JOIN ner_types USING(id_ner_type)
-                """
-                df_nlinks = pd.read_sql(query, pg_con)
-
-                # check if the ner is not mentioned in the news for the given date range
-                if founded_ner != "" and founded_ner not in df_nlinks.ner_name.values:
-                    founded_ner = None
-
-            else:
-                # ner not found
-                df_news = None
-                df_nlinks = None
-
-        except (Exception, Error) as error:
+    except (Exception, Error) as error:
             print("Error connection to PostgreSQL:\n", error)
-            founded_ner = None
-            df_news = None
-            df_nlinks = None
 
-        finally:
+    finally:
             if "pg_con" in locals() and pg_con:
                 pg_con.close()
-    else:
-        founded_ner = None
-        df_news = None
-        df_nlinks = None
-        print(f"Dates is incorrect {date_min} - {date_max}")
 
-    return (
-        founded_ner,
-        df_news,
-        df_nlinks,
-    )
-
+    return founded_ner, df_query
 
 def compute_triplets(
-    PG_CONN_CFG,
-    input_ner,
-    date_min: str,
-    date_max: str,
-    graph_depth=None,
-    min_news_count=1,
-):
+                        PG_CONN_CFG,
+                        input_ner,
+                        date_min: str,
+                        date_max: str,
+                        graph_depth=1,
+                        min_news_count=1,
+                    ):
     # query to db and fuzzy search by synonyms table
-    founded_ner, df_news, df_nlinks = get_db_data_for_triplets(
-        PG_CONN_CFG, input_ner, date_min, date_max
-    )
-
-    if founded_ner is None or df_news is None or df_nlinks is None:
-        return pd.DataFrame(
-            {
-                "source": ["bad-PER#PER", "bad-LOC#LOC", "bad-ORG#ORG"],
-                "target": ["bad-ORG#ORG", "bad-MISC#MISC", "bad-LOC#LOC"],
-                "amount": [0, 0, 0],
-                "news": [
-                    ["nonews00", "nonews01", "nonews02"],
-                    ["nonews2"],
-                    ["nonews3"],
-                ],
-            }
-        )
-
-    df_nlinks_counts = df_nlinks.groupby(by="id_news").ner_name.count()
-
-    # удаляем новости с > 5 нер, пока не решится вопрос с комплексными
-    # сводками новостей (часто с ключевым словом "главное:"), где могут
-    # в виде списка приводится не связанные между собой новости,
-    # в настоящий момент все ner, упоминаемые в любой части тако сводки,
-    # окажутся связанными между собой, что не является верным; имеет смысл
-    # дробить такие новости на несколько, либо использовать схожий подход,
-    # когда ner будут связаны между обой только в пределах перечислений
-    id_news_to_drop = df_nlinks_counts[
-        ((df_nlinks_counts < 2) | (df_nlinks_counts > 5))
-    ].index
-    df_nlinks = df_nlinks[~df_nlinks.id_news.isin(id_news_to_drop)]
-
-    if input_ner != "":
-
-        lvl_ners = [
-            [founded_ner],
-        ]  # functionality for future
-        lvl_idx = []  # functionality for future
-        prev_lvls_idx = []
-
-        for _ in range(graph_depth):
-
-            lvl_idx.append(
-                list(
-                    set(
-                        df_nlinks[
-                            (
-                                df_nlinks.ner_name.isin(lvl_ners[-1])
-                                & (~df_nlinks.id_news.isin(prev_lvls_idx))
+    founded_ner, df_query = get_db_data_for_triplets(
+                            PG_CONN_CFG, input_ner, date_min, date_max, graph_depth
                             )
-                        ].id_news
-                    )
-                )
-            )
 
-            lvl_ners.append(
-                list(
-                    set(df_nlinks[df_nlinks.id_news.isin(lvl_idx[-1])].ner_name)
-                    - set(lvl_ners[-1])
-                )
-            )
+    if (founded_ner is None) or (len(df_query)==0):
+        return sample_df
 
-            prev_lvls_idx.extend(lvl_idx[-1])
+    # remove news with number of NEs >5
+    #TODO: calibrate threshold
+    df_temp = df_query.groupby(['id_news', 'source'])['news_date'].count().sort_values(ascending=False).reset_index()
+    id_news_to_drop = df_temp[df_temp['news_date']>=5].id_news.values
+    df_query = df_query[~df_query.id_news.isin(id_news_to_drop)]
+    del df_temp
 
-        # print(list(map(len, lvl_idx)))
-        # print(list(map(len, lvl_ners)))
+    df_query['source_name'] = df_query.apply(lambda x: x['source']+ '#SELF' if x['depth']==1 else 
+                                                x['source']+'#' + x['source_type'], axis =1)
+    df_query['target_name'] = df_query.apply(lambda x: x['target']+ '#'+ x['target_type'], axis=1)
 
-        df_nlinks = df_nlinks[df_nlinks.id_news.isin(prev_lvls_idx)]
-
-    re_clean_name = re.compile(r"[^a-zA-Zа-яА-Я0-9 \-+№%]+")
-
-    #highlight self
-    df_nlinks.loc[df_nlinks["ner_name"]==founded_ner, 'ner_type'] = "SELF"
-
-    df_nlinks["ner_name"] = (
-        df_nlinks.ner_name.map(lambda x: re_clean_name.sub("", x))
-        + "#"
-        + df_nlinks.ner_type
-    )
-    df_nlinks.drop(columns="ner_type", inplace=True)
-
-    df_nlinks = df_nlinks.groupby("id_news").agg({"ner_name": sorted})
-
-    df_nlinks = df_nlinks.merge(df_news, how="left", left_index=True, right_index=True)
-    del df_news
-
-    df_nlinks["ner_name"] = df_nlinks.ner_name.map(lambda x: list(combinations(x, 2)))
-
-    df_nlinks["news"] = (
-        df_nlinks.news_date.dt.strftime("%Y-%m-%d %H:%M: ") + df_nlinks.summary_text
-    )
-    df_nlinks = df_nlinks[["ner_name", "news"]]
-
-    df_triples = df_nlinks.explode("ner_name")
-    del df_nlinks
-
-    df_triples = df_triples.groupby("ner_name", as_index=False).agg(
-        news=("news", sorted), amount=("news", len)
-    )
+    df_triplets = df_query.groupby(['source_name', 'target_name']).agg({'id_news': ['count']})
+    df_triplets = df_triplets.reset_index()
+    df_triplets.columns = ['source', 'target', 'count']
+    df_triplets = df_triplets[(df_triplets['count']>=min_news_count) | (df_triplets['source']==founded_ner+'#SELF')]
+    df_triplets = pd.merge(df_triplets, df_query.drop(columns=['source', 'target', 'source_type', 'target_type', 'depth', 'news_date']), 
+            how='inner', left_on=['source', 'target'],
+            right_on=['source_name', 'target_name']).drop(columns=['source_name', 'target_name', 'id_news', 'source_id', 'target_id'])
+    df_triplets = df_triplets.groupby(['source', 'target', 'count'])['summary_text'].apply(list).reset_index()
+    df_triplets.rename(columns={'count': 'amount', 'summary_text': 'news'}, inplace=True)
     
-    # drop edges with news amount < min_news_count
-    df_triples['old_1'] = df_triples['ner_name'].apply(lambda x: x[0])
-    df_triples['old_2'] = df_triples['ner_name'].apply(lambda x: x[1])
-
-    if min_news_count > 1:
-        df_triples = df_triples[(df_triples.amount >= min_news_count) | (df_triples['old_1'] == f'{founded_ner}#SELF') | \
-                                (df_triples['old_2'] == f'{founded_ner}#SELF')]
-
-    df_triples.drop(columns=['old_1', 'old_2'], inplace=True)
-
-    df_triples[["source", "target"]] = pd.DataFrame(
-        df_triples["ner_name"].tolist(), index=df_triples.index
-    )
-
-    df_triples = df_triples[["source", "target", "amount", "news"]]
-
-    return df_triples
+    return df_triplets
 
 
 def build_network(graph_query):
 
-    df_triples = compute_triplets(PG_CONN_CFG, **graph_query)
+    df_triplets = compute_triplets(PG_CONN_CFG, **graph_query)
 
     G = nx.from_pandas_edgelist(
-        df_triples,
+        df_triplets,
         source="source",
         target="target",
         edge_attr=["amount", "news"],
@@ -289,16 +171,14 @@ def index_func():
         }
     else:
         graph_query = {
-            "input_ner": "Россия",
-            "date_min": (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d"),
+            "input_ner": "Москва",
+            "date_min": (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d"),
             "date_max": datetime.now().strftime("%Y-%m-%d"),
-            "graph_depth": 2,
-            "min_news_count": 4,
+            "graph_depth": 1,
+            "min_news_count": 3,
         }
 
     session["graph_query"] = graph_query
-
-    print(f"Info: Graph query: {graph_query}")
 
     return render_template("index.html")
 
@@ -306,14 +186,7 @@ def index_func():
 @app.route("/data")
 def static_proxy():
     network = build_network(session.get("graph_query"))
-
     return jsonify(network)
-
-
-@app.route("/about", methods=["GET", "POST"])
-def about_func():
-
-    return render_template("about.html")
 
 
 @app.route("/FAQ", methods=["GET", "POST"])

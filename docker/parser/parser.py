@@ -6,13 +6,26 @@ from sqlalchemy import create_engine
 from datetime import datetime
 import pandas as pd
 
+with open(os.environ.get('TELEGRAM_SECRETS_FILE'), 'r') as f:
+    dic = json.load(f)
+
+    SESSION = dic['SESSION']
+    API_ID = dic['API_ID']
+    API_HASH = dic['API_HASH']
+
+with open('./app/channels.json', 'r') as f:
+    channels = json.load(f)
+
+TABLE_NAME = 'news'
+DB_PORT = 5432
+
 def make_connection():
 
     postgres_dic = {}
 
     postgres_dic['dbname'] = os.environ.get('POSTGRES_DB')
     postgres_dic['user'] = os.environ.get('POSTGRES_USER')
-    postgres_dic['port'] = 5432
+    postgres_dic['port'] = DB_PORT
     postgres_dic['host'] = 'postgres'
 
     with open(os.environ.get('POSTGRES_PASSWORD_FILE'), 'r') as f:
@@ -24,14 +37,6 @@ def make_connection():
 
 
 def make_client():
-
-    with open(os.environ.get('TELEGRAM_SECRETS_FILE'), 'r') as f:
-        dic = json.load(f)
-
-    SESSION = dic['SESSION']
-    API_ID = dic['API_ID']
-    API_HASH = dic['API_HASH']
-
     return TelegramClient(StringSession(SESSION), API_ID, API_HASH)
 
 async def upload_data(conn, event, chat, table_name):
@@ -49,9 +54,10 @@ async def upload_data(conn, event, chat, table_name):
 def main():
 
     conn = make_connection()
-    table_name = 'news'
-    #РИА новости, ТАСС
-    chats = [-1001101170442, -1001050820672]
+
+    #РИА новости, ТАСС, MMI, Proeconomics, Осторожно Москва
+    # chats = [-1001101170442, -1001050820672, -1001107922757, -1001364672287, -1001756106969]
+    chats = list(channels.values())
 
     client = make_client()
     client.start()
@@ -61,7 +67,7 @@ def main():
     async def handler(event):
         
         chat  = await event.get_chat()
-        await upload_data(conn, event, chat, table_name)
+        await upload_data(conn, event, chat, TABLE_NAME)
 
     client.run_until_disconnected()
    

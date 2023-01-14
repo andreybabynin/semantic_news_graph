@@ -6,16 +6,23 @@ FAQ
 
 {% block body %}
 <div class="container">
-    <h1>FAQ</h1>
+    <h5>FAQ</h5>
     <body>
-    <p>- Поле ввода "NER", можно оставить пустым,
-        а можно написать название какой-нибудь именованной сущности, например: 'Россия', 'Газпром' или 'Путин', по ним будет построен граф.
+    <p>Можно написать название какой-нибудь именованной сущности, например: 'Россия', 'Газпром' или 'Путин', по ним будет построен граф.
         Далее можно выбрать промежуток времени где упоминалась NER(макс 1 месяц), глубину графа и минимальное количество связующих новостей</p>
     <p>- При нажатии на надпись ребра, "N news", под окном графа выведутся новости в которых упоминались NER'ы, N - количество новостей.</p>
     <p>- Граф можно двигать.</p>
     <p>- Граф можно приближать и отдалять.</p>
-    <!-- <h1>Baseline</h1> -->
     </body>
-    <!-- <p>Baseline состоит из нескольких блоков</p> -->
+    <h5>Github</h5>
+    <p><a class="link" href="https://github.com/andreybabynin/semantic_news_graph">https://github.com/andreybabynin/semantic_news_graph</a></p>
+    </body>
+    <h5>Team</h5>
+    <body>
+    <a class="me-3 py-2 text-dark text-decoration-none" href="https://github.com/andreybabynin">Андрей</a>
+    <a class="me-3 py-2 text-dark text-decoration-none" href="https://github.com/wisoffe">Илья</a>
+    <a class="me-3 py-2 text-dark text-decoration-none" href="https://github.com/Netees">Алексей</a>
+    </body>
+
 </div>
 {% endblock %}
