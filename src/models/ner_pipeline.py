@@ -313,9 +313,9 @@ def write_db_results_ner_pipeline(pg_conn_cfg, synonyms):
 
             synonyms.match_by_ner_table(db_ner_name2id, db_ner_qid2id)
 
-        assert synonyms.count_without_id_ner == 0
+            print(f"Info: Table ner: {len(rows_to_ner_table)} rows added.")
 
-        print(f"Info: Table ner: {len(rows_to_ner_table)} rows added.")
+        assert synonyms.count_without_id_ner == 0
 
         # 03. Insert new ents to ner_synonyms table
         rows_to_ner_syn = synonyms.get_rows_to_synonyms_table()
@@ -326,7 +326,7 @@ def write_db_results_ner_pipeline(pg_conn_cfg, synonyms):
             """
             execute_values(pg_cur, query, rows_to_ner_syn)
 
-        print(f"Info: Table ner_synonyms: {len(rows_to_ner_syn)} rows added.")
+            print(f"Info: Table ner_synonyms: {len(rows_to_ner_syn)} rows added.")
 
         # 04. Insert rows to db news_links table
         rows_to_news_links = synonyms.get_rows_to_news_links_table()
@@ -354,7 +354,7 @@ def write_db_results_ner_pipeline(pg_conn_cfg, synonyms):
             """
             execute_values(pg_cur, query, rows_to_syn_stats)
 
-        print(f"Info: Table synonyms_stats: {len(rows_to_syn_stats)} rows added.")
+            print(f"Info: Table synonyms_stats: {len(rows_to_syn_stats)} rows added.")
 
         ##########################
         # END SINGLE TRANSACTION #

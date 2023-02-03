@@ -25,11 +25,17 @@ PG_CONN_CFG = {
 with open(os.environ.get("POSTGRES_PASSWORD_FILE"), "r") as f:
     PG_CONN_CFG["password"] = f.readlines()[0].rstrip("\n")
 
-sample_df = pd.DataFrame({"source": ["bad-PER#PER", "bad-LOC#LOC", "bad-ORG#ORG"],
-                        "target": ["bad-ORG#ORG", "bad-MISC#MISC", "bad-LOC#LOC"],
+sample_df = pd.DataFrame({"source": ["bad-PER", "bad-LOC", "bad-ORG"],
+                        "target": ["bad-ORG", "bad-MISC", "bad-LOC"],
                         "amount": [0, 0, 0],
                         "news": [["nonews00", "nonews01", "nonews02"],
                                 ["nonews2"], ["nonews3"]]})
+
+sample_node_type_dic = {'bad-PER': {'ner_type': 'PER'},
+                        'bad-LOC': {'ner_type': 'LOC'},
+                        'bad-MISC': {'ner_type': 'MISC'},
+                        'bad-ORG': {'ner_type': 'ORG'}
+                        }
 
 def get_db_data_for_triplets(pg_conn_cfg, input_ner: str, date_min: str, date_max: str, depth: int):
 
@@ -117,7 +123,7 @@ def compute_triplets(
                             )
 
     if (founded_ner is None) or (len(df_query)==0):
-        return sample_df
+        return sample_df, sample_node_type_dic
 
     # remove news with number of NEs >5
     #TODO: calibrate threshold
@@ -126,26 +132,45 @@ def compute_triplets(
     df_query = df_query[~df_query.id_news.isin(id_news_to_drop)]
     del df_temp
 
-    df_query['source_name'] = df_query.apply(lambda x: x['source']+ '#SELF' if x['depth']==1 else 
-                                                x['source']+'#' + x['source_type'], axis =1)
-    df_query['target_name'] = df_query.apply(lambda x: x['target']+ '#'+ x['target_type'], axis=1)
+    # df_query['source_name'] = df_query.apply(lambda x: x['source']+ '#SELF' if x['depth']==1 else 
+    #                                             x['source']+'#' + x['source_type'], axis =1)
+    # df_query['target_name'] = df_query.apply(lambda x: x['target']+ '#'+ x['target_type'], axis=1)
 
-    df_triplets = df_query.groupby(['source_name', 'target_name']).agg({'id_news': ['count']})
+    df_triplets = df_query.groupby(['source', 'target']).agg({'id_news': ['count']})
     df_triplets = df_triplets.reset_index()
     df_triplets.columns = ['source', 'target', 'count']
-    df_triplets = df_triplets[(df_triplets['count']>=min_news_count) | (df_triplets['source']==founded_ner+'#SELF')]
-    df_triplets = pd.merge(df_triplets, df_query.drop(columns=['source', 'target', 'source_type', 'target_type', 'depth', 'news_date']), 
+    df_triplets = df_triplets[(df_triplets['count']>=min_news_count) | (df_triplets['source']==founded_ner)]
+    
+    df_triplets = pd.merge(df_triplets, df_query.drop(columns=['depth']), 
             how='inner', left_on=['source', 'target'],
-            right_on=['source_name', 'target_name']).drop(columns=['source_name', 'target_name', 'id_news', 'source_id', 'target_id'])
+            right_on=['source', 'target']).drop(columns=['id_news', 'source_id', 'target_id'])
+
+    # convert data
+    df_triplets['news_date'] = pd.to_datetime(df_triplets['news_date'])
+    df_triplets['news_date'] = df_triplets['news_date'].apply(lambda x: datetime.strftime(x.date(), '%Y-%m-%d'))
+
+    #add data to news
+    df_triplets['summary_text'] = df_triplets.apply(lambda x: x['news_date'] + ' - ' + x['summary_text'], axis=1)
+
+    # extract NEs types
+    common_list = df_triplets[['source', 'source_type']].drop_duplicates().values.tolist() + \
+                    df_triplets[['target', 'target_type']].drop_duplicates().values.tolist()
+
+    nodes_type_dic = {i[0]: {'ner_type': i[1]} for i in common_list}
+    nodes_type_dic[founded_ner]['ner_type'] = 'SELF'
+
+    #sort news by date from earliest to latest
+    df_triplets = df_triplets.sort_values(by='news_date')
+
     df_triplets = df_triplets.groupby(['source', 'target', 'count'])['summary_text'].apply(list).reset_index()
     df_triplets.rename(columns={'count': 'amount', 'summary_text': 'news'}, inplace=True)
     
-    return df_triplets
+    return df_triplets, nodes_type_dic
 
 
 def build_network(graph_query):
 
-    df_triplets = compute_triplets(PG_CONN_CFG, **graph_query)
+    df_triplets, node_type_dic = compute_triplets(PG_CONN_CFG, **graph_query)
 
     G = nx.from_pandas_edgelist(
         df_triplets,
@@ -154,6 +179,8 @@ def build_network(graph_query):
         edge_attr=["amount", "news"],
         create_using=nx.Graph(),
     )
+    #add nes attribut to nodes
+    nx.set_node_attributes(G, node_type_dic)
     data = nx.node_link_data(G)
 
     return data

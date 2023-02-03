@@ -56,8 +56,9 @@ def main():
     conn = make_connection()
 
     #РИА новости, ТАСС, MMI, Proeconomics, Осторожно Москва
-    # chats = [-1001101170442, -1001050820672, -1001107922757, -1001364672287, -1001756106969]
-    chats = list(channels.values())
+    chats = [-1001101170442, -1001050820672, -1001107922757, -1001364672287, -1001756106969]
+    #TODO: fix download from dic
+    #chats = list(channels.values())
 
     client = make_client()
     client.start()

@@ -49,7 +49,8 @@ d3.json("/data", function (error, graph) {
     .attr('r', 10)
     .attr('stroke', 'black')
     .attr('fill', function (d, i) {
-      switch (d.id.split('#')[1]) {
+      // switch (d.id.split('#')[1]) {
+      switch (d.ner_type) {
         case "PER":
           return "#008000"; // Green
         case "LOC":
@@ -155,7 +156,7 @@ d3.json("/data", function (error, graph) {
 });
 
 function dragstarted(d) {
-  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+  if (!d3.event.active) simulation.alphaTarget(0.4).restart();
   d.fx = d.x;
   d.fy = d.y;
 }
